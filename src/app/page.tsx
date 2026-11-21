@@ -1,0 +1,2 @@
+import Link from "next/link";
+export default function Home(){return <main className="min-h-screen grid place-items-center p-6"><section className="panel max-w-xl w-full p-8 text-center"><div className="text-sm font-semibold text-blue-700">PARTNER COLLABORATION MANAGER</div><h1 className="text-3xl font-bold mt-3">Your outreach workspace</h1><p className="muted mt-3">Manage partner invitations, permissions and private collaboration workspaces.</p><Link className="primary inline-block mt-6" href="/login">Sign in</Link></section></main>}
