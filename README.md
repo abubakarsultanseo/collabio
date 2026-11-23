@@ -21,6 +21,7 @@ This update adds shared two-user partnerships, flexible link-exchange deals, cal
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-side privileged Supabase access | **Yes** |
 | `RESEND_API_KEY` | Resend email API | **Yes** |
 | `EMAIL_FROM` | Verified sender identity | No |
+| `EMAIL_REPLY_TO` | Optional inbox for replies to invitation emails | No |
 | `NEXT_PUBLIC_SITE_URL` | Public Collabio URL | No |
 | `NEXT_PUBLIC_APP_URL` | Backward-compatible URL fallback | No |
 | `INVITATION_EXPIRY_HOURS` | Invitation lifetime (default 72) | No |
