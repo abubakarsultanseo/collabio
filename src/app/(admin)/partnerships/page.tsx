@@ -1,0 +1,5 @@
+import {requireUser} from "@/server/auth";
+import {createAdminClient} from "@/lib/supabase/admin";
+import PartnershipsWorkspace from "@/components/partnerships-workspace";
+import Link from "next/link";
+export default async function PartnershipsPage(){const user=await requireUser();const db=createAdminClient();const [{data:partnerships},{data:people}]=await Promise.all([db.from("partnerships").select("id,name,user_a_id,user_b_id,created_at").or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`).order("created_at",{ascending:false}),db.from("profiles").select("id,full_name,email").eq("account_status","active").neq("id",user.id).order("full_name").limit(250)]);return <main className="mx-auto max-w-6xl space-y-6 p-5 md:p-8"><Link href="/dashboard" className="text-sm text-blue-700">← Dashboard</Link><header><p className="text-sm font-semibold tracking-wide text-blue-700">COLLABIO</p><h1 className="mt-1 text-3xl font-bold">Partnerships</h1><p className="muted mt-2">Shared workspace for deals, link requests, and balances.</p></header><PartnershipsWorkspace people={people??[]} partnerships={partnerships??[]} currentUserId={user.id}/></main>}

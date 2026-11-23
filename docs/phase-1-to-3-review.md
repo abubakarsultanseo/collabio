@@ -1,26 +1,26 @@
-# Collabio implementation status (review build)
+# Collabio release status
 
-This ZIP contains a compatibility/stabilization update to the supplied project. It is **not a declaration that Phases 1–3 are complete**.
+## Included in this ZIP
+- Existing Supabase authentication, invitation flow, team profile foundations and partner directory.
+- Shared partnerships for two active Collabio users, with database access rules for partnership members.
+- Deals with flexible side quotas, edit history, calculated Live/pending/remaining/over-quota values, and automatic close/reopen behavior.
+- Deal-linked request creation, status updates, reassignment between deals, Live/Shared timestamps, stale Shared dashboard indicators and in-app notifications.
+- Responsive workspace navigation, dashboard partner summaries, and partnership/deal screens based on the supplied outreach-tool UI reference.
+- Invitation diagnostics identify missing Supabase environment variable names without exposing values; default invitation expiry is 72 hours.
 
-## Included in this update
-- Invitation URL now prefers `NEXT_PUBLIC_SITE_URL` and retains `NEXT_PUBLIC_APP_URL` as a backward-compatible fallback.
-- Default invitation expiry is aligned to the master prompt's 48 hours (can be overridden with `INVITATION_EXPIRY_HOURS`).
-- Collabio branding replaces the previous generic project name in the main screens and invitation email.
-- Added migration `0002_collaboration_and_notifications.sql` for request records, comments, activity, notifications, email logs, reminder jobs, participant-scoped RLS, request-created notifications, reminder scheduling records, and first-view tracking.
-- `.env.example` documents `NEXT_PUBLIC_SITE_URL` and `CRON_SECRET`.
+## Required deployment steps
+1. Confirm this is the correct Collabio Supabase project and take a backup.
+2. Check which migrations are already applied. Do not rerun migrations 0001 or 0002 on an initialized database.
+3. Apply migration `0003_shared_partnership_deals.sql` only after migrations 0001 and 0002. It maps old requests to Legacy deals and raises a clear error if any record cannot be mapped.
+4. Set `NEXT_PUBLIC_SITE_URL=https://www.collabio.online` and `INVITATION_EXPIRY_HOURS=72` in the correct Vercel environments. Keep `SUPABASE_SERVICE_ROLE_KEY` server-only.
+5. Deploy to Preview first and verify with two active test accounts before production.
 
-## Required before deploying this ZIP
-1. Apply `supabase/migrations/0001_foundation.sql` only if it has not already been applied to this new Collabio Supabase project.
-2. Apply `supabase/migrations/0002_collaboration_and_notifications.sql` after migration 0001.
-3. Set `NEXT_PUBLIC_SITE_URL=https://www.collabio.online` in Vercel. Keep `NEXT_PUBLIC_APP_URL` only if another existing part of the deployment still relies on it.
-4. Keep `SUPABASE_SERVICE_ROLE_KEY` server-only. Never expose it through a `NEXT_PUBLIC_` variable.
+## Verification performed for this ZIP
+- `npm run typecheck`: passed.
+- `npm run lint`: passed for `src` (existing config warnings are outside `src`).
+- `npm run build`: passed with Next.js 15.5.29.
 
-## Not yet complete / not verified
-- Complete request creation/edit/status UI and server-side permission enforcement for all ten permission toggles.
-- Admin/partner workspace navigation and complete private workspace UX.
-- End-to-end comments and activity-history UI.
-- A deployed, independently scheduled 5–15 minute reminder runner that sends Resend emails, records idempotent delivery, and handles overdue transitions. The migration creates reminder job records but does not itself execute or email them.
-- Full RLS isolation tests using two partner identities and one admin identity.
-- End-to-end invite, login, request, email and reminder tests against the user's live Supabase/Resend accounts.
-
-The local dependency installation timed out in this environment, so a fresh `npm run build` and `npm run typecheck` could not be completed. Do not treat this ZIP as production-ready until the remaining items and build are verified.
+## Not verified against live services
+- Supabase migration execution and existing production request backfill.
+- Two-account RLS behavior, live invitations, Google OAuth, and Resend email delivery.
+- Optional email-on-Live and weekly summary scheduler. In-app notifications and stale Shared dashboard counts are included; scheduled email summaries are not.

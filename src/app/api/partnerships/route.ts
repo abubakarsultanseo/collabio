@@ -1,0 +1,9 @@
+import {NextResponse} from "next/server";
+import {z} from "zod";
+import {createClient} from "@/lib/supabase/server";
+import {createAdminClient} from "@/lib/supabase/admin";
+
+const schema=z.object({name:z.string().trim().min(2).max(140),partnerId:z.string().uuid()});
+async function current(){const auth=await createClient();const {data:{user}}=await auth.auth.getUser();if(!user)return {error:NextResponse.json({error:"Authentication required"},{status:401})};const {data:profile}=await auth.from("profiles").select("account_status").eq("id",user.id).maybeSingle();if(profile?.account_status!=="active")return {error:NextResponse.json({error:"Active account required"},{status:403})};return {user,auth};}
+export async function GET(){try{const state=await current();if("error" in state)return state.error;const admin=createAdminClient();const {data,error}=await admin.from("partnerships").select("id,name,user_a_id,user_b_id,created_at").or(`user_a_id.eq.${state.user.id},user_b_id.eq.${state.user.id}`).order("created_at",{ascending:false});if(error)throw error;return NextResponse.json({partnerships:data??[]});}catch(e){return NextResponse.json({error:e instanceof Error?e.message:"Could not load partnerships"},{status:500});}}
+export async function POST(request:Request){try{const state=await current();if("error" in state)return state.error;const parsed=schema.safeParse(await request.json());if(!parsed.success)return NextResponse.json({error:parsed.error.issues[0]?.message??"Invalid input"},{status:400});const {data,error}=await state.auth.rpc("create_partnership",{peer_id:parsed.data.partnerId,partnership_name:parsed.data.name});if(error)throw error;return NextResponse.json({id:data,success:true},{status:201});}catch(e){return NextResponse.json({error:e instanceof Error?e.message:"Could not create partnership"},{status:500});}}
