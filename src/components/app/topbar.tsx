@@ -8,6 +8,7 @@ import {
   workspaceNav,
 } from "@/components/app/nav-items";
 import { ProfileMenu, type MenuProfile } from "@/components/app/profile-menu";
+import { NotificationBell } from "@/components/app/notification-bell";
 import { ThemeToggle } from "@/components/app/theme-toggle";
 
 export function Topbar({ profile }: { profile: MenuProfile }) {
@@ -18,8 +19,8 @@ export function Topbar({ profile }: { profile: MenuProfile }) {
   );
 
   return (
-    <header className="mb-5 flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
-      <div className="flex min-w-0 items-center gap-2">
+    <header className="mb-5 flex min-w-0 items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
         <span className="truncate text-sm font-semibold">
           {page?.label ?? "Collabio"}
         </span>
@@ -31,6 +32,7 @@ export function Topbar({ profile }: { profile: MenuProfile }) {
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <CommandMenu isAdmin={isAdmin} />
+        <NotificationBell />
         <ThemeToggle />
         <ProfileMenu profile={profile} />
       </div>

@@ -38,11 +38,13 @@ export default function NotificationsWorkspace() {
   }, [load]);
   async function mark(item: Notification) {
     if (item.read_at) return;
-    await fetch("/api/notifications", {
+    const response = await fetch("/api/notifications", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: item.id }),
     });
+    if (!response.ok) return;
+    window.dispatchEvent(new Event("collabio:notification-read"));
     setItems((current) =>
       current.map((row) =>
         row.id === item.id

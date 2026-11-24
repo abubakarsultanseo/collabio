@@ -5,6 +5,8 @@ import { StatusBadge, formatStatus } from "@/components/status-badge";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRequestChat } from "@/components/chat/use-request-chat";
 import {
+  Eye,
+  StickyNote,
   FileSpreadsheet,
   Inbox,
   MessageSquare,
@@ -20,6 +22,11 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/components/app/empty-state";
+import {
+  InlineStatus,
+  placementDomain,
+  RequestDetails,
+} from "@/components/requests/request-tools";
 import { cn } from "@/lib/utils";
 
 type Row = {
@@ -37,6 +44,9 @@ type Row = {
   instructions: string | null;
   notes: string | null;
   status: string;
+  canManage?: boolean;
+  canChangeStatus?: boolean;
+  rejection_reason?: string | null;
   first_viewed_at: string | null;
   deadline_at: string;
   was_overdue: boolean;
@@ -215,13 +225,10 @@ export default function RequestListWorkspace({
   const [advanced, setAdvanced] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [editing, setEditing] = useState<Row | null>(null);
-  const [pendingStatus, setPendingStatus] = useState<{
-    id: string;
-    status: string;
+  const [details, setDetails] = useState<{
+    row: Row;
+    mode: "view" | "note";
   } | null>(null);
-  const [feedback, setFeedback] = useState<{ id: string; text: string } | null>(
-    null,
-  );
   const [presets, setPresets] = useState<Preset[]>([]);
   const [presetName, setPresetName] = useState("");
   const [presetOpen, setPresetOpen] = useState(false);
@@ -366,13 +373,8 @@ export default function RequestListWorkspace({
   }
 
   async function update(row: Row, body: Record<string, unknown>) {
-    if (mutation.current) return;
+    if (mutation.current) return false;
     mutation.current = true;
-    const nextStatus = typeof body.status === "string" ? body.status : null;
-    if (nextStatus) {
-      setPendingStatus({ id: row.id, status: nextStatus });
-      setFeedback({ id: row.id, text: "Saving…" });
-    }
     setBusy(row.id);
     try {
       const response = await fetch("/api/requests", {
@@ -384,16 +386,15 @@ export default function RequestListWorkspace({
       if (!response.ok)
         throw new Error(data.error ?? "Could not update request.");
       if (data.request) mergeRow(data.request);
-      if (nextStatus) setFeedback({ id: row.id, text: "Saved ✓" });
-      else notify("Request updated.");
+      notify(body.status ? "Status saved." : "Request updated.");
+      return true;
     } catch (caught) {
-      if (nextStatus) setFeedback({ id: row.id, text: "Save failed" });
       notify(
         caught instanceof Error ? caught.message : "Could not update request.",
         "error",
       );
+      return false;
     } finally {
-      setPendingStatus(null);
       setBusy(null);
       mutation.current = false;
     }
@@ -443,7 +444,7 @@ export default function RequestListWorkspace({
     (new Date(row.deadline_at) < new Date() && !row.first_viewed_at);
 
   function openRequest(row: Row) {
-    setEditing(row);
+    setDetails({ row, mode: "view" });
     if (scope === "inbox" && !row.first_viewed_at)
       void markSeen(row).catch(() => {});
   }
@@ -470,50 +471,70 @@ export default function RequestListWorkspace({
     );
   }
 
-  function statusControls(row: Row) {
-    const current =
-      pendingStatus?.id === row.id ? pendingStatus.status : row.status;
+  function rowActions(row: Row) {
     return (
-      <div className="space-y-2">
-        <div className="flex flex-wrap gap-1.5">
-          {["reviewing", "accepted", "hold"].map((value) => (
+      <div className="flex flex-wrap gap-1.5">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={rowAction}
+          onClick={() => openRequest(row)}
+        >
+          <Eye size={12} aria-hidden /> View
+        </Button>
+        {chatButton(row, "")}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={rowAction}
+          onClick={() => setDetails({ row, mode: "note" })}
+        >
+          <StickyNote size={12} aria-hidden /> Add note
+        </Button>
+        {row.canManage && (
+          <>
             <Button
-              key={value}
               type="button"
               variant="outline"
               size="sm"
-              disabled={busy !== null || value === current}
-              onClick={() => void update(row, { status: value })}
-              className={cn(
-                rowAction,
-                "capitalize",
-                value === "accepted"
-                  ? "bg-[var(--success-bg)] text-[var(--green)]"
-                  : value === "hold"
-                    ? "bg-[var(--warning-bg)] text-[var(--amber)]"
-                    : "bg-[var(--info-bg)] text-[var(--brand-dark)]",
-              )}
+              className={rowAction}
+              disabled={busy !== null}
+              onClick={() => setEditing(row)}
             >
-              {formatStatus(value)}
+              <Pencil size={12} aria-hidden /> Edit
             </Button>
-          ))}
-        </div>
-        <Select
-          aria-label={`Status for request ${row.request_code}`}
-          className="h-8 min-w-36 text-xs capitalize"
-          value={current}
-          disabled={busy !== null}
-          onChange={(event) => void update(row, { status: event.target.value })}
-        >
-          {statuses.map((value) => (
-            <option key={value} value={value}>
-              {formatStatus(value)}
-            </option>
-          ))}
-        </Select>
-        <p role="status" className="min-h-4 text-xs text-[var(--muted)]">
-          {feedback?.id === row.id ? feedback.text : ""}
-        </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={cn(rowAction, "border-[var(--red)] text-[var(--red)]")}
+              disabled={busy !== null}
+              onClick={() => setDeleteTarget(row)}
+            >
+              <Trash2 size={12} aria-hidden /> Delete
+            </Button>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  function rowStatus(row: Row) {
+    return (
+      <div className="flex flex-wrap items-center gap-1.5">
+        <InlineStatus
+          status={row.status}
+          enabled={row.canChangeStatus}
+          busy={busy !== null}
+          onSave={(status, reason) => update(row, { status, reason })}
+        />
+        {overdue(row) && row.status !== "overdue" && (
+          <span className="ml-1">
+            <StatusBadge status="overdue" />
+          </span>
+        )}
       </div>
     );
   }
@@ -728,12 +749,19 @@ export default function RequestListWorkspace({
             aria-label="Scrollable request table"
             className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]"
           >
-            <table className="os-table w-full min-w-[890px] text-left text-sm">
+            <table className="os-table w-full text-left md:min-w-[890px] text-sm">
               <thead className="text-xs uppercase tracking-wide text-[var(--muted)]">
                 <tr>
                   {["Request", "Partner", "Type", "Status", "Actions"].map(
                     (label) => (
-                      <th key={label} scope="col" className="px-4 py-3">
+                      <th
+                        key={label}
+                        scope="col"
+                        className={cn(
+                          "px-4 py-3",
+                          label !== "Request" && "hidden md:table-cell",
+                        )}
+                      >
                         {label}
                       </th>
                     ),
@@ -745,10 +773,6 @@ export default function RequestListWorkspace({
                   const counterpart =
                     (scope === "sent" ? row.receiver : row.sender)?.full_name ??
                     "Partner";
-                  const current =
-                    pendingStatus?.id === row.id
-                      ? pendingStatus.status
-                      : row.status;
                   return (
                     <tr
                       key={row.id}
@@ -759,19 +783,26 @@ export default function RequestListWorkspace({
                       <td className="px-4 py-3">
                         <div
                           className="max-w-60 truncate font-semibold"
-                          title={row.anchor_text}
+                          title={placementDomain(row.placement_page_url)}
                         >
-                          #{row.request_code} · {row.anchor_text}
+                          #{row.request_code} ·{" "}
+                          {placementDomain(row.placement_page_url)}
                         </div>
                         <div
                           className="max-w-60 truncate text-xs text-[var(--muted)]"
-                          title={row.workspace?.name}
+                          title={row.anchor_text}
                         >
-                          {row.workspace?.name ?? "Workspace"}
+                          {row.anchor_text}
                         </div>
-                        {chatButton(row, "mt-2 md:hidden")}
+                        <div className="mt-3 space-y-2 md:hidden">
+                          <p className="text-xs text-[var(--muted)]">
+                            {counterpart} · {formatStatus(row.request_type)}
+                          </p>
+                          {rowStatus(row)}
+                          {rowActions(row)}
+                        </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="hidden px-4 py-3 md:table-cell">
                         <div className="max-w-32 truncate" title={counterpart}>
                           {counterpart}
                         </div>
@@ -779,44 +810,14 @@ export default function RequestListWorkspace({
                           {displayDate(row.created_at)}
                         </div>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 capitalize">
+                      <td className="hidden whitespace-nowrap px-4 py-3 capitalize md:table-cell">
                         {formatStatus(row.request_type)}
                       </td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={current} />
-                        {overdue(row) && current !== "overdue" && (
-                          <span className="ml-1">
-                            <StatusBadge status="overdue" />
-                          </span>
-                        )}
+                      <td className="hidden px-4 py-3 md:table-cell">
+                        {rowStatus(row)}
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1.5 whitespace-nowrap">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className={rowAction}
-                            onClick={() => openRequest(row)}
-                            disabled={busy !== null}
-                          >
-                            <Pencil size={12} aria-hidden /> Edit
-                          </Button>
-                          {chatButton(row, "hidden md:inline-flex")}
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={busy !== null}
-                            className={cn(
-                              rowAction,
-                              "border-[var(--red)] text-[var(--red)]",
-                            )}
-                            onClick={() => setDeleteTarget(row)}
-                          >
-                            <Trash2 size={12} aria-hidden /> Delete
-                          </Button>
-                        </div>
+                      <td className="hidden px-4 py-3 md:table-cell">
+                        {rowActions(row)}
                       </td>
                     </tr>
                   );
@@ -902,7 +903,6 @@ export default function RequestListWorkspace({
               <p className="text-[var(--muted)]">
                 Review deadline · {displayDate(activeRow.deadline_at)}
               </p>
-              {statusControls(activeRow)}
             </div>
             <EditRequestForm
               key={activeRow.id}
@@ -912,6 +912,14 @@ export default function RequestListWorkspace({
             />
           </DialogContent>
         </Dialog>
+      )}
+      {details && (
+        <RequestDetails
+          key={`${details.row.id}:${details.mode}`}
+          mode={details.mode}
+          row={rows.find((row) => row.id === details.row.id) ?? details.row}
+          onClose={() => setDetails(null)}
+        />
       )}
       {deleteTarget && (
         <ConfirmDialog

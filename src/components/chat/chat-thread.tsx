@@ -9,11 +9,10 @@ import {
   type FormEvent,
 } from "react";
 import { Copy, ExternalLink, Send } from "lucide-react";
-import type { ChatTarget } from "@/components/chat/chat-drawer";
+import type { ChatTarget } from "@/components/chat/chat-context";
 import { useToast } from "@/components/app/toast";
 import { StatusBadge, formatStatus } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
 type Message = {
@@ -39,25 +38,39 @@ type ThreadResponse = {
   canWrite: boolean;
   title?: string;
   request?: RequestDetails;
-  canUpdateStatus?: boolean;
 };
 
 class ThreadAccessError extends Error {}
 
-const statuses = [
-  "new_request",
-  "seen",
-  "reviewing",
-  "accepted",
-  "rejected",
-  "in_progress",
-  "live",
-  "shared",
-  "hold",
-  "waiting_for_partner",
-  "cancelled",
-  "overdue",
-];
+function LinkifiedMessage({ text }: { text: string }) {
+  return text
+    .split(/((?:https?:\/\/|www\.)[^\s<>"']+)/gi)
+    .map((part, index) => {
+      if (!/^(?:https?:\/\/|www\.)/i.test(part)) return part;
+      const cleaned = part.replace(/[.,!?;:]+$/, "");
+      try {
+        const url = new URL(
+          /^www\./i.test(cleaned) ? `https://${cleaned}` : cleaned,
+        );
+        if (url.protocol !== "http:" && url.protocol !== "https:") return part;
+        return (
+          <span key={index}>
+            <a
+              className="text-[var(--brand-dark)] underline underline-offset-2"
+              href={url.href}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {cleaned}
+            </a>
+            {part.slice(cleaned.length)}
+          </span>
+        );
+      } catch {
+        return part;
+      }
+    });
+}
 
 export function requestChatTitle(url: string, anchor: string) {
   try {
@@ -100,9 +113,13 @@ async function chatAction(
 export function ChatThread({
   target,
   open,
+  initialDraft = "",
+  onDraft,
 }: {
   target: ChatTarget;
   open: (target: ChatTarget) => void;
+  initialDraft?: string;
+  onDraft?: (value: string) => void;
 }) {
   const notify = useToast();
   const [info, setInfo] = useState<ThreadResponse | null>(null);
@@ -111,9 +128,7 @@ export function ChatThread({
   const [older, setOlder] = useState(false);
   const [paging, setPaging] = useState(false);
   const [error, setError] = useState("");
-  const [body, setBody] = useState("");
-  const [savingStatus, setSavingStatus] = useState<string | null>(null);
-  const [statusFeedback, setStatusFeedback] = useState("");
+  const [body, setBody] = useState(initialDraft);
   const [next, setNext] = useState<ChatTarget | undefined>();
   const list = useRef<HTMLDivElement>(null);
   const historyRef = useRef<Message[]>([]);
@@ -124,11 +139,6 @@ export function ChatThread({
   const historyGeneration = useRef(0);
   const refreshing = useRef(false);
   const pending = useRef(new Set<string>());
-  const requestStatusInFlight = useRef(false);
-  const latestRequestStatus = useRef<{
-    status: string;
-    savedAt: number;
-  } | null>(null);
   const actions = useRef(target);
 
   useEffect(() => {
@@ -191,7 +201,6 @@ export function ChatThread({
     async (signal?: AbortSignal) => {
       if (document.hidden || refreshing.current) return;
       refreshing.current = true;
-      const started = Date.now();
       const generation = historyGeneration.current;
       try {
         const result = await fetchPage(undefined, signal);
@@ -225,10 +234,6 @@ export function ChatThread({
         }
         const confirmed = new Set(result.messages.map((message) => message.id));
         setOutbox((items) => items.filter((item) => !confirmed.has(item.id)));
-        const localStatus = latestRequestStatus.current;
-        if (result.request && localStatus && localStatus.savedAt >= started) {
-          result.request.status = localStatus.status;
-        }
         setInfo(result);
         setError("");
         setNext(actions.current.nextUnread?.());
@@ -346,47 +351,6 @@ export function ChatThread({
     }
   }
 
-  async function changeStatus(requestId: string, status: string) {
-    if (requestStatusInFlight.current) return;
-    requestStatusInFlight.current = true;
-    setSavingStatus(status);
-    setStatusFeedback("Saving…");
-    try {
-      const response = await fetch("/api/requests", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: requestId, status }),
-      });
-      const result = await response.json();
-      if (!response.ok)
-        throw new Error(result.error ?? "Could not save this status.");
-      const saved = result.request?.status ?? status;
-      latestRequestStatus.current = { status: saved, savedAt: Date.now() };
-      setInfo((current) =>
-        current?.request
-          ? { ...current, request: { ...current.request, status: saved } }
-          : current,
-      );
-      window.dispatchEvent(
-        new CustomEvent("collabio:request-updated", {
-          detail: { id: requestId, status: saved },
-        }),
-      );
-      setStatusFeedback("Saved");
-    } catch (caught) {
-      setStatusFeedback("Save failed");
-      notify(
-        caught instanceof Error
-          ? caught.message
-          : "Could not save this status.",
-        "error",
-      );
-    } finally {
-      requestStatusInFlight.current = false;
-      setSavingStatus(null);
-    }
-  }
-
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!body.trim() || !info?.canWrite) return;
@@ -396,6 +360,7 @@ export function ChatThread({
       state: "sending",
     };
     setBody("");
+    onDraft?.("");
     void send(item);
   }
 
@@ -430,7 +395,7 @@ export function ChatThread({
                   {formatStatus(request.request_type)}
                 </span>
               </span>
-              <StatusBadge status={savingStatus ?? request.status} />
+              <StatusBadge status={request.status} />
             </div>
             <div className="flex flex-wrap items-center gap-3 text-xs font-medium text-[var(--brand-dark)]">
               <a
@@ -462,28 +427,6 @@ export function ChatThread({
                 Target URL <ExternalLink size={12} aria-hidden />
               </a>
             </div>
-            {info?.canUpdateStatus && (
-              <div className="flex flex-wrap items-center gap-2">
-                <Select
-                  aria-label="Update request status"
-                  className="h-8 w-auto capitalize"
-                  disabled={!!savingStatus}
-                  value={savingStatus ?? request.status}
-                  onChange={(event) =>
-                    void changeStatus(request.id, event.target.value)
-                  }
-                >
-                  {statuses.map((status) => (
-                    <option value={status} key={status}>
-                      {formatStatus(status)}
-                    </option>
-                  ))}
-                </Select>
-                <span role="status" className="text-xs text-[var(--muted)]">
-                  {statusFeedback}
-                </span>
-              </div>
-            )}
           </>
         )}
       </header>
@@ -541,7 +484,7 @@ export function ChatThread({
                 className={`max-w-[88%] rounded-xl border border-[var(--border)] px-3 py-2 ${own ? "bg-[var(--brand-soft)]" : "bg-[var(--card)]"}`}
               >
                 <p className="whitespace-pre-wrap break-words text-sm">
-                  {message.body}
+                  <LinkifiedMessage text={message.body} />
                 </p>
                 <p className="mt-1 text-[10px] text-[var(--muted)]">
                   {own ? "You" : (info?.title ?? "Other participant")} ·{" "}
@@ -559,7 +502,7 @@ export function ChatThread({
             className="ml-auto max-w-[88%] rounded-xl border border-[var(--border)] bg-[var(--brand-soft)] px-3 py-2"
           >
             <p className="whitespace-pre-wrap break-words text-sm">
-              {item.body}
+              <LinkifiedMessage text={item.body} />
             </p>
             <div className="mt-1 flex items-center gap-2 text-xs text-[var(--muted)]">
               <span role="status">
@@ -590,7 +533,20 @@ export function ChatThread({
             aria-label="Message"
             placeholder="Write a message…"
             value={body}
-            onChange={(event) => setBody(event.target.value)}
+            onChange={(event) => {
+              setBody(event.target.value);
+              onDraft?.(event.target.value);
+            }}
+            onKeyDown={(event) => {
+              if (
+                event.key === "Enter" &&
+                !event.shiftKey &&
+                !event.nativeEvent.isComposing
+              ) {
+                event.preventDefault();
+                if (!event.repeat) event.currentTarget.form?.requestSubmit();
+              }
+            }}
           />
           <Button type="submit" disabled={!body.trim()}>
             <Send size={15} aria-hidden /> Send

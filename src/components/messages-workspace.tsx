@@ -2,7 +2,7 @@
 
 import { MessageSquare, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useChat, type ChatTarget } from "@/components/chat/chat-drawer";
+import { useChat, type ChatTarget } from "@/components/chat/chat-context";
 import { EmptyState } from "@/components/app/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,8 +17,10 @@ type Contact = {
 
 export default function MessagesWorkspace({
   requestId,
+  compact = false,
 }: {
   requestId?: string;
+  compact?: boolean;
 }) {
   const { open, active } = useChat();
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -115,18 +117,20 @@ export default function MessagesWorkspace({
   );
   return (
     <div className="page-enter mx-auto max-w-5xl space-y-5">
-      <header>
-        <h1 className="text-2xl font-bold">
-          {isAdmin
-            ? "Chats"
-            : contacts[0]
-              ? `Chat with ${contacts[0].name}`
-              : "Direct chat"}
-        </h1>
-        <p className="mt-2 text-sm text-[var(--muted)]">
-          Private messages for general collaboration.
-        </p>
-      </header>
+      {!compact && (
+        <header>
+          <h1 className="text-2xl font-bold">
+            {isAdmin
+              ? "Chats"
+              : contacts[0]
+                ? `Chat with ${contacts[0].name}`
+                : "Direct chat"}
+          </h1>
+          <p className="mt-2 text-sm text-[var(--muted)]">
+            Private messages for general collaboration.
+          </p>
+        </header>
+      )}
       {error ? (
         <section className="os-card p-5" role="alert">
           <p className="text-sm">{error}</p>

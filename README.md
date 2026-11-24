@@ -43,6 +43,15 @@ Apply SQL migrations in numeric order in the Supabase SQL Editor. Do not rerun m
 
 Chat polls for new messages every five seconds while the panel is open and the tab is visible. Unread counts refresh separately. Existing request comments are retained and initially count as unread until the recipient opens the thread.
 
+## Request workflow update
+
+Apply `supabase/migrations/0007_request_notes_and_rejections.sql` after 0006, before deploying this build. Existing rejected requests keep their history even if no reason was recorded at the time.
+
+- The header bell shows unread notifications. The floating Chat button opens the direct chat contacts for the assigned admin and opens the partner’s direct thread on partner accounts.
+- The chat popup can be moved on desktop using the three dots, or using arrow keys while the handle has focus. Minimize and restore to keep a draft during the current session. Enter sends a message and Shift+Enter adds a line.
+- Open a request with **View**, add shared notes via **Add note**, and use the status control in the list. Rejecting requires a reason. Only admins can change request fields or delete records.
+- In a preview, verify these actions as the assigned admin and as a partner. Check rejection with blank and valid reasons, copy the full request, and confirm note and reason visibility stays within the request workspace.
+
 ## Local development
 
 Install Node.js LTS, then run `npm install`, copy `.env.example` to `.env.local`, fill in the values, and run `npm run dev`.

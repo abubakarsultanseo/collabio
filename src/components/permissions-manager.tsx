@@ -7,12 +7,8 @@ import { useCallback, useEffect, useState } from "react";
 type PermissionKey =
   | "view_requests"
   | "add_new_requests"
-  | "edit_own_requests"
-  | "edit_admin_requests"
-  | "edit_partner_requests"
   | "update_request_status"
   | "add_comments"
-  | "delete_requests"
   | "view_activity_history"
   | "download_reports";
 type PermissionSet = Record<PermissionKey, boolean>;
@@ -35,24 +31,16 @@ type HistoryRow = {
 const permissionLabels: Record<PermissionKey, string> = {
   view_requests: "View requests",
   add_new_requests: "Add new requests",
-  edit_own_requests: "Edit own requests",
-  edit_admin_requests: "Edit admin requests",
-  edit_partner_requests: "Edit partner requests",
   update_request_status: "Update request status",
   add_comments: "Add comments",
-  delete_requests: "Delete requests",
   view_activity_history: "View activity history",
   download_reports: "Download reports",
 };
 const permissionDefaults: PermissionSet = {
   view_requests: true,
   add_new_requests: true,
-  edit_own_requests: true,
-  edit_admin_requests: false,
-  edit_partner_requests: false,
   update_request_status: true,
   add_comments: true,
-  delete_requests: false,
   view_activity_history: true,
   download_reports: false,
 };
@@ -146,14 +134,7 @@ export default function PermissionsManager() {
                   key={key}
                   className="flex items-center justify-between gap-3 rounded-lg px-2 py-2 text-sm hover:bg-[var(--canvas)]"
                 >
-                  <span>
-                    {permissionLabels[key]}
-                    {key === "delete_requests" && (
-                      <span className="text-[var(--muted)] ml-1">
-                        (default off)
-                      </span>
-                    )}
-                  </span>
+                  <span>{permissionLabels[key]}</span>
                   <input
                     type="checkbox"
                     checked={

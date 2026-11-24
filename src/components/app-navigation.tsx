@@ -102,7 +102,9 @@ export default function AppNavigation({ isAdmin }: { isAdmin: boolean }) {
   const path = usePathname();
   const more = useRef<HTMLDetailsElement>(null);
   const moreTrigger = useRef<HTMLElement>(null);
-  const workspaceItems = workspaceNav(isAdmin);
+  const workspaceItems = workspaceNav(isAdmin).filter(
+    (item) => item.href !== "/notifications" && item.href !== "/messages",
+  );
   const overflow = workspaceItems.filter((item) => !item.mobileLabel);
   const moreActive = [...overflow, ...(isAdmin ? adminItems : [])].some(
     (item) => isActivePage(path, item.href),

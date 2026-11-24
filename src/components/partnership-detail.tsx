@@ -1,5 +1,10 @@
 "use client";
 import { useRequestChat } from "@/components/chat/use-request-chat";
+import {
+  InlineStatus,
+  RequestDetails,
+  placementDomain,
+} from "@/components/requests/request-tools";
 import { EmptyState } from "@/components/app/empty-state";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -7,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 
 import { useToast } from "@/components/app/toast";
-import { StatusBadge, formatStatus } from "@/components/status-badge";
+import { StatusBadge } from "@/components/status-badge";
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -35,6 +40,8 @@ type RequestRow = {
   instructions: string | null;
   notes: string | null;
   status: string;
+  canChangeStatus?: boolean;
+  rejection_reason?: string | null;
   first_viewed_at: string | null;
   deadline_at: string;
   was_overdue: boolean;
@@ -44,20 +51,6 @@ type RequestRow = {
   sender: { full_name: string } | null;
   receiver: { full_name: string } | null;
 };
-const statuses = [
-  "new_request",
-  "seen",
-  "reviewing",
-  "accepted",
-  "rejected",
-  "in_progress",
-  "live",
-  "shared",
-  "hold",
-  "waiting_for_partner",
-  "cancelled",
-  "overdue",
-];
 const emptyForm = {
   placementPageUrl: "",
   anchorText: "",
@@ -78,6 +71,10 @@ export default function PartnershipDetail({
   isAdmin: boolean;
 }) {
   const notify = useToast();
+  const [details, setDetails] = useState<{
+    row: RequestRow;
+    mode: "view" | "note";
+  } | null>(null);
   const [requests, setRequests] = useState<RequestRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState("all");
@@ -169,17 +166,19 @@ export default function PartnershipDetail({
       setBusy(false);
     }
   }
-  async function setStatus(row: RequestRow, status: string) {
+  async function setStatus(row: RequestRow, status: string, reason?: string) {
     try {
       const response = await fetch("/api/requests", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: row.id, status }),
+        body: JSON.stringify({ id: row.id, status, reason }),
       });
       const data = await response.json();
       if (!response.ok)
         throw new Error(data.error ?? "Could not update request status.");
       if (data.request) mergeRow(data.request);
+      notify("Status saved.");
+      return true;
     } catch (caught) {
       notify(
         caught instanceof Error
@@ -187,6 +186,7 @@ export default function PartnershipDetail({
           : "Could not update request status.",
         "error",
       );
+      return false;
     }
   }
   async function markSeen(row: RequestRow) {
@@ -198,7 +198,23 @@ export default function PartnershipDetail({
     });
     if (response.ok) {
       const data = await response.json();
-      if (data.request) mergeRow(data.request);
+      if (data.request) {
+        const { status, ...fields } = data.request;
+        setRequests((current) =>
+          current.map((item) =>
+            item.id === row.id
+              ? {
+                  ...item,
+                  ...fields,
+                  status:
+                    item.status === "new_request" && status === "seen"
+                      ? "seen"
+                      : item.status,
+                }
+              : item,
+          ),
+        );
+      }
     }
   }
   return (
@@ -392,16 +408,16 @@ export default function PartnershipDetail({
         ) : (
           <div className="space-y-3">
             {shown.map((row) => (
-              <article
-                key={row.id}
-                onClick={() => void markSeen(row).catch(() => {})}
-                className="os-card p-4 md:p-5"
-              >
+              <article key={row.id} className="os-card p-4 md:p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h3 className="font-semibold">
-                      #{row.request_code} · {row.anchor_text}
+                      #{row.request_code} ·{" "}
+                      {placementDomain(row.placement_page_url)}
                     </h3>
+                    <p className="text-sm text-[var(--muted)]">
+                      {row.anchor_text}
+                    </p>
                     <p className="text-[var(--muted)] mt-1 text-xs">
                       {row.sender_id === currentUserId
                         ? "Sent by you"
@@ -415,26 +431,6 @@ export default function PartnershipDetail({
                   <StatusBadge
                     status={row.was_overdue ? "overdue" : row.status}
                   />
-                </div>
-                <div className="mt-3 grid gap-3 text-sm md:grid-cols-2">
-                  <a
-                    onClick={(event) => event.stopPropagation()}
-                    href={row.placement_page_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="truncate text-[var(--brand-dark)]"
-                  >
-                    Placement: {row.placement_page_url}
-                  </a>
-                  <a
-                    onClick={(event) => event.stopPropagation()}
-                    href={row.target_link}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="truncate text-[var(--brand-dark)]"
-                  >
-                    Target: {row.target_link}
-                  </a>
                 </div>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t pt-3">
                   <span className="text-[var(--muted)] text-xs">
@@ -463,25 +459,32 @@ export default function PartnershipDetail({
                         </span>
                       )}
                     </Button>
-                    <label
-                      className="flex items-center gap-2 text-xs"
-                      onClick={(event) => event.stopPropagation()}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setDetails({ row, mode: "view" });
+                        void markSeen(row).catch(() => {});
+                      }}
                     >
-                      Status
-                      <Select
-                        className="min-w-36 py-2"
-                        value={row.status}
-                        onChange={(event) =>
-                          void setStatus(row, event.target.value)
-                        }
-                      >
-                        {statuses.map((status) => (
-                          <option key={status} value={status}>
-                            {formatStatus(status)}
-                          </option>
-                        ))}
-                      </Select>
-                    </label>
+                      View
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDetails({ row, mode: "note" })}
+                    >
+                      Add note
+                    </Button>
+                    <InlineStatus
+                      status={row.status}
+                      enabled={row.canChangeStatus}
+                      onSave={(status, reason) =>
+                        setStatus(row, status, reason)
+                      }
+                    />
                   </div>
                 </div>
               </article>
@@ -489,6 +492,14 @@ export default function PartnershipDetail({
           </div>
         )}
       </section>
+      {details && (
+        <RequestDetails
+          key={`${details.row.id}:${details.mode}`}
+          mode={details.mode}
+          row={requests.find((row) => row.id === details.row.id) ?? details.row}
+          onClose={() => setDetails(null)}
+        />
+      )}
     </div>
   );
 }
