@@ -1,11 +1,194 @@
 "use client";
-import {useEffect,useState} from "react";
-type Report={month:string;summary:{total:number;sent:number;received:number;live:number;overdue:number;accepted:number;rejected:number};partners:Array<{id:string;name:string;total:number;sent:number;received:number;live:number;overdue:number}>;statuses:Array<{status:string;count:number}>};
-const currentMonth=new Date().toISOString().slice(0,7);
-export default function MonthlyReportsWorkspace(){const [month,setMonth]=useState(currentMonth);const [report,setReport]=useState<Report|null>(null);const [error,setError]=useState("");const [loading,setLoading]=useState(true);
- useEffect(()=>{let alive=true;setLoading(true);fetch(`/api/reports/monthly?month=${month}`,{cache:"no-store"}).then(async response=>{const data=await response.json();if(!response.ok)throw new Error(data.error??"Could not load report.");if(alive){setReport(data);setError("");}}).catch(caught=>{if(alive)setError(caught instanceof Error?caught.message:"Could not load report.");}).finally(()=>{if(alive)setLoading(false);});return()=>{alive=false;};},[month]);
- const cards=report?[{label:"Requests created",value:report.summary.total},{label:"Sent by me",value:report.summary.sent},{label:"Received by me",value:report.summary.received},{label:"Live placements",value:report.summary.live},{label:"Overdue",value:report.summary.overdue},{label:"Accepted",value:report.summary.accepted}]:[];
- return <main className="mx-auto max-w-6xl space-y-6 p-5 md:p-8 lg:p-10"><header className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-blue-700">Performance overview</p><h1 className="mt-2 text-3xl font-bold">Monthly Reports</h1><p className="muted mt-2">Review request activity for a month and compare your partner workspaces.</p></div><label className="text-sm font-medium">Report month<input className="field mt-1" type="month" value={month} onChange={event=>setMonth(event.target.value)}/></label></header>
- {error&&<p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}{loading?<section className="panel p-8 text-center text-sm text-slate-500">Loading monthly report…</section>:report&&<><section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{cards.map(card=><article key={card.label} className="panel p-5"><p className="muted text-sm">{card.label}</p><p className="mt-3 text-3xl font-bold">{card.value}</p></article>)}</section><section className="grid gap-5 lg:grid-cols-2"><article className="panel overflow-hidden"><div className="border-b p-5"><h2 className="font-semibold">Partner workspace performance</h2><p className="muted mt-1 text-sm">Request volume and outcomes for {month}.</p></div>{report.partners.length===0?<p className="muted p-5 text-sm">No requests were created this month.</p>:<div className="overflow-x-auto"><table className="w-full min-w-[620px] text-left text-sm"><thead className="bg-slate-50 text-xs text-slate-500"><tr>{["Workspace","Total","Sent","Received","Live","Overdue"].map(item=><th className="px-4 py-3 font-medium" key={item}>{item}</th>)}</tr></thead><tbody className="divide-y">{report.partners.map(partner=><tr key={partner.id}><td className="px-4 py-3 font-medium">{partner.name}</td><td className="px-4 py-3">{partner.total}</td><td className="px-4 py-3">{partner.sent}</td><td className="px-4 py-3">{partner.received}</td><td className="px-4 py-3">{partner.live}</td><td className="px-4 py-3">{partner.overdue}</td></tr>)}</tbody></table></div>}</article><article className="panel p-5"><h2 className="font-semibold">Request status breakdown</h2><p className="muted mt-1 text-sm">Current status of requests created during this month.</p>{report.statuses.length===0?<p className="muted mt-5 text-sm">No status activity to show.</p>:<div className="mt-5 space-y-4">{report.statuses.map(item=><div key={item.status}><div className="mb-1 flex justify-between gap-3 text-sm"><span className="capitalize">{item.status.replaceAll("_"," ")}</span><span className="font-semibold">{item.count}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{width:`${Math.max(5,report.summary.total?item.count/report.summary.total*100:0)}%`}}/></div></div>)}</div>}</article></section></>}
- </main>;
+import { useToast } from "@/components/app/toast";
+import { StatusBadge } from "@/components/status-badge";
+import { useEffect, useState } from "react";
+type Report = {
+  month: string;
+  summary: {
+    total: number;
+    sent: number;
+    received: number;
+    live: number;
+    overdue: number;
+    accepted: number;
+    rejected: number;
+  };
+  partners: Array<{
+    id: string;
+    name: string;
+    total: number;
+    sent: number;
+    received: number;
+    live: number;
+    overdue: number;
+  }>;
+  statuses: Array<{ status: string; count: number }>;
+};
+const currentMonth = new Date().toISOString().slice(0, 7);
+export default function MonthlyReportsWorkspace() {
+  const notify = useToast();
+  const [month, setMonth] = useState(currentMonth);
+  const [report, setReport] = useState<Report | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    fetch(`/api/reports/monthly?month=${month}`, { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok)
+          throw new Error(data.error ?? "Could not load report.");
+        if (alive) {
+          setReport(data);
+        }
+      })
+      .catch((caught) => {
+        if (alive)
+          notify(
+            caught instanceof Error ? caught.message : "Could not load report.",
+            "error",
+          );
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [month, notify]);
+  const cards = report
+    ? [
+        { label: "Requests created", value: report.summary.total },
+        { label: "Sent by me", value: report.summary.sent },
+        { label: "Received by me", value: report.summary.received },
+        { label: "Live placements", value: report.summary.live },
+        { label: "Overdue", value: report.summary.overdue },
+        { label: "Accepted", value: report.summary.accepted },
+      ]
+    : [];
+  return (
+    <main className="mx-auto max-w-6xl space-y-6 p-5 md:p-8 lg:p-10">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[.16em] text-blue-700">
+            Performance overview
+          </p>
+          <h1 className="mt-2 text-3xl font-bold">Monthly Reports</h1>
+          <p className="muted mt-2">
+            Review request activity for a month and compare your partner
+            workspaces.
+          </p>
+        </div>
+        <label className="text-sm font-medium">
+          Report month
+          <input
+            className="field mt-1"
+            type="month"
+            value={month}
+            onChange={(event) => setMonth(event.target.value)}
+          />
+        </label>
+      </header>
+      {loading ? (
+        <section className="panel p-8 text-center text-sm text-slate-500">
+          Loading monthly report…
+        </section>
+      ) : (
+        report && (
+          <>
+            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {cards.map((card) => (
+                <article key={card.label} className="panel p-5">
+                  <p className="muted text-sm">{card.label}</p>
+                  <p className="mt-3 text-3xl font-bold">{card.value}</p>
+                </article>
+              ))}
+            </section>
+            <section className="grid gap-5 lg:grid-cols-2">
+              <article className="panel overflow-hidden">
+                <div className="border-b p-5">
+                  <h2 className="font-semibold">
+                    Partner workspace performance
+                  </h2>
+                  <p className="muted mt-1 text-sm">
+                    Request volume and outcomes for {month}.
+                  </p>
+                </div>
+                {report.partners.length === 0 ? (
+                  <p className="muted p-5 text-sm">
+                    No requests were created this month.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[620px] text-left text-sm">
+                      <thead className="bg-slate-50 text-xs text-slate-500">
+                        <tr>
+                          {[
+                            "Workspace",
+                            "Total",
+                            "Sent",
+                            "Received",
+                            "Live",
+                            "Overdue",
+                          ].map((item) => (
+                            <th className="px-4 py-3 font-medium" key={item}>
+                              {item}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {report.partners.map((partner) => (
+                          <tr key={partner.id}>
+                            <td className="px-4 py-3 font-medium">
+                              {partner.name}
+                            </td>
+                            <td className="px-4 py-3">{partner.total}</td>
+                            <td className="px-4 py-3">{partner.sent}</td>
+                            <td className="px-4 py-3">{partner.received}</td>
+                            <td className="px-4 py-3">{partner.live}</td>
+                            <td className="px-4 py-3">{partner.overdue}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </article>
+              <article className="panel p-5">
+                <h2 className="font-semibold">Request status breakdown</h2>
+                <p className="muted mt-1 text-sm">
+                  Current status of requests created during this month.
+                </p>
+                {report.statuses.length === 0 ? (
+                  <p className="muted mt-5 text-sm">
+                    No status activity to show.
+                  </p>
+                ) : (
+                  <div className="mt-5 space-y-4">
+                    {report.statuses.map((item) => (
+                      <div key={item.status}>
+                        <div className="mb-1 flex justify-between gap-3 text-sm">
+                          <StatusBadge status={item.status} />
+                          <span className="font-semibold">{item.count}</span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                          <div
+                            className="h-full rounded-full bg-blue-600"
+                            style={{
+                              width: `${Math.max(5, report.summary.total ? (item.count / report.summary.total) * 100 : 0)}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </article>
+            </section>
+          </>
+        )
+      )}
+    </main>
+  );
 }

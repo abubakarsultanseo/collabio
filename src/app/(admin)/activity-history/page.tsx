@@ -1,4 +1,67 @@
 "use client";
-import {useEffect,useState} from "react";
-type Row={id:string;request_id:string|null;action_type:string;actor:{full_name:string}|null;created_at:string;new_value:Record<string,unknown>|null};
-export default function ActivityHistoryPage(){const [rows,setRows]=useState<Row[]>([]);const [error,setError]=useState("");useEffect(()=>{fetch("/api/activity",{cache:"no-store"}).then(async response=>{const data=await response.json();if(!response.ok)throw new Error(data.error??"Could not load activity.");setRows(data.activity??[]);}).catch(e=>setError(e.message));},[]);return <main className="mx-auto max-w-5xl space-y-5 p-6 md:p-10"><header><p className="text-xs font-semibold uppercase tracking-[.16em] text-blue-700">Audit trail</p><h1 className="mt-2 text-3xl font-bold">Activity History</h1><p className="muted mt-2">Request and communication events in your accessible workspaces.</p></header>{error&&<p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}<section className="panel divide-y">{rows.length===0?<p className="muted p-7 text-sm">No activity has been recorded yet.</p>:rows.map(row=><article key={row.id} className="flex flex-wrap items-start justify-between gap-3 p-4"><div><h2 className="font-medium capitalize">{row.action_type.replaceAll("_"," ")}</h2><p className="muted mt-1 text-xs">{row.actor?.full_name??"Workspace member"}{row.request_id?` · Request ${row.request_id.slice(0,8)}`:""}</p></div><time className="muted text-xs">{new Date(row.created_at).toLocaleString()}</time></article>)}</section></main>;}
+import { useToast } from "@/components/app/toast";
+import { useEffect, useState } from "react";
+type Row = {
+  id: string;
+  request_id: string | null;
+  action_type: string;
+  actor: { full_name: string } | null;
+  created_at: string;
+  new_value: Record<string, unknown> | null;
+};
+export default function ActivityHistoryPage() {
+  const notify = useToast();
+  const [rows, setRows] = useState<Row[]>([]);
+  useEffect(() => {
+    fetch("/api/activity", { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok)
+          throw new Error(data.error ?? "Could not load activity.");
+        setRows(data.activity ?? []);
+      })
+      .catch((e) => notify(e.message, "error"));
+  }, [notify]);
+  return (
+    <main className="mx-auto max-w-5xl space-y-5 p-6 md:p-10">
+      <header>
+        <p className="text-xs font-semibold uppercase tracking-[.16em] text-blue-700">
+          Audit trail
+        </p>
+        <h1 className="mt-2 text-3xl font-bold">Activity History</h1>
+        <p className="muted mt-2">
+          Request and communication events in your accessible workspaces.
+        </p>
+      </header>
+      <section className="panel divide-y">
+        {rows.length === 0 ? (
+          <p className="muted p-7 text-sm">
+            No activity has been recorded yet.
+          </p>
+        ) : (
+          rows.map((row) => (
+            <article
+              key={row.id}
+              className="flex flex-wrap items-start justify-between gap-3 p-4"
+            >
+              <div>
+                <h2 className="font-medium capitalize">
+                  {row.action_type.replaceAll("_", " ")}
+                </h2>
+                <p className="muted mt-1 text-xs">
+                  {row.actor?.full_name ?? "Workspace member"}
+                  {row.request_id
+                    ? ` · Request ${row.request_id.slice(0, 8)}`
+                    : ""}
+                </p>
+              </div>
+              <time className="muted text-xs">
+                {new Date(row.created_at).toLocaleString()}
+              </time>
+            </article>
+          ))
+        )}
+      </section>
+    </main>
+  );
+}
