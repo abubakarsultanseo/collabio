@@ -40,4 +40,4 @@ Install Node.js LTS, then run `npm install`, copy `.env.example` to `.env.local`
 
 ## Verification
 
-Typecheck, lint, and production build passed for this ZIP. Live Supabase, Resend and OAuth behavior cannot be confirmed from the ZIP alone. Deploy to Vercel Preview first, apply migration 0005, configure `CRON_SECRET`, then verify two-way requests, access rules, reminders, and email delivery before production.
+Typecheck, lint, and production build passed before the Hobby-plan scheduling adjustment. Live Supabase, Resend and OAuth behavior cannot be confirmed from the ZIP alone. Apply migration 0005, configure `CRON_SECRET` in Vercel and as a GitHub Actions repository secret, then deploy. GitHub Actions calls the secured reminder endpoint every 30 minutes because Vercel Hobby does not allow 15-minute Cron schedules.

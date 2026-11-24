@@ -6,7 +6,7 @@
 - Permissions: request visibility, creation, editing, status changes, comments, activity history, deletion, and report access. Permission changes are recorded in `permission_history`.
 - Collaboration core: requests in both directions inside the same admin-partner workspace; request number, source page, anchor, target URL, request type, instructions, notes, created/updated times, first-viewed time, 24-hour deadline, and status.
 - Request views: inbox, sent, pending/overdue, filters, search, editable request fields, status updates, and a shared message thread.
-- Activity and alerts: in-app notifications, unread tracking, request activity, comments, event emails for new requests/views/status/comments, 12-hour reminder jobs, and 24-hour overdue jobs. Vercel Cron invokes the secured reminder endpoint every 15 minutes. Reminder email uses Resend when configured.
+- Activity and alerts: in-app notifications, unread tracking, request activity, comments, event emails for new requests/views/status/comments, 12-hour reminder jobs, and 24-hour overdue jobs. GitHub Actions invokes the secured reminder endpoint every 30 minutes to support Vercel Hobby deployments. Reminder email uses Resend when configured.
 - Dashboard and UI: responsive left sidebar and mobile menu, admin and partner metrics, recent requests, deadlines, partner workspaces, and responsive forms/lists.
 - SEO partner directory from migration `0004_seo_partners.sql` remains available in each workspace, with admin cross-workspace review.
 
@@ -28,6 +28,6 @@
 
 - Applying migrations and checking existing production data/backfills.
 - Two-account RLS behavior and role/permission enforcement against the live Supabase project.
-- Live invitation acceptance, Google OAuth, Resend delivery, and Vercel Cron execution.
+- Live invitation acceptance, Google OAuth, Resend delivery, and scheduled GitHub Actions execution.
 - Email delivery, including event and reminder messages, depends on verified Resend sender settings.
 - CSV/Excel exports and monthly reports from Phase 5/4 expansion.
