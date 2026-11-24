@@ -4,7 +4,7 @@ Collabio is an invite-only collaboration workspace for managing SEO outreach par
 
 ## Current build status
 
-This update adds shared two-user partnerships, flexible link-exchange deals, calculated balances, request status tracking, quota history, and stale Shared indicators to the supplied Collabio foundation. Review [`docs/phase-1-to-3-review.md`](docs/phase-1-to-3-review.md) and [`docs/deal-system.md`](docs/deal-system.md) before deploying.
+This update completes the Phase 1 team setup layer on the supplied Collabio foundation: email/password and Google sign-in, protected workspaces, invitations and acceptance, pending-invite visibility, role management, and account activation/deactivation. It also includes the existing shared partnerships, link-exchange deals, request status tracking, quota history, and stale Shared indicators. Review [`docs/phase-1-to-3-review.md`](docs/phase-1-to-3-review.md) and [`docs/deal-system.md`](docs/deal-system.md) before deploying.
 
 ## Stack
 - Next.js App Router, React, TypeScript, Tailwind CSS
@@ -40,4 +40,4 @@ Install Node.js LTS, then run `npm install`, copy `.env.example` to `.env.local`
 
 ## Verification
 
-Before production, run `npm run typecheck`, `npm run lint`, and `npm run build` in a network-enabled environment. Verify the migration, invitation, both partnership member logins, deal quota balances, status changes, stale flags, and RLS on a Preview deployment first. Live Supabase, Resend and OAuth behavior are not verified by the ZIP preparation process.
+The code update should pass typecheck, lint, and production build before release. Live Supabase, Resend and OAuth behavior cannot be confirmed from the ZIP alone. Deploy to Vercel Preview first, then verify admin sign-in, a new invitation, invitation acceptance, partner sign-in, role changes, account deactivation, and protected access before production.

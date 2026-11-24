@@ -1,2 +1,14 @@
-import {requireAdmin} from "@/server/auth";import {listPartners} from "@/server/partners";import InvitePartnerForm from "@/components/invite-partner-form";
-export default async function PartnersPage(){await requireAdmin();const partners=await listPartners();return <main className="max-w-5xl mx-auto p-6 md:p-10"><a href="/dashboard" className="text-sm text-blue-700">← Dashboard</a><h1 className="text-3xl font-bold mt-3">My Partners</h1><p className="muted mt-2">Invite partners and manage their private workspace access.</p><section className="panel p-6 mt-6"><h2 className="font-semibold mb-4">Invite Partner</h2><InvitePartnerForm/></section><section className="panel p-6 mt-6"><h2 className="font-semibold">Partner accounts</h2>{partners.length===0?<p className="muted text-sm mt-3">No partners have been invited yet.</p>:<div className="overflow-x-auto mt-4"><table className="w-full text-sm"><thead><tr className="text-left border-b"><th className="py-2">Name</th><th>Email</th><th>Company</th><th>Status</th></tr></thead><tbody>{partners.map(p=><tr key={p.id} className="border-b"><td className="py-3">{p.full_name}</td><td>{p.email}</td><td>{p.company??"-"}</td><td>{p.account_status}</td></tr>)}</tbody></table></div>}</section></main>}
+import {requireAdmin} from "@/server/auth";
+import InvitePartnerForm from "@/components/invite-partner-form";
+import TeamAdminPanel from "@/components/team-admin-panel";
+
+export default async function PartnersPage(){
+  await requireAdmin();
+  return <main className="mx-auto max-w-6xl p-6 md:p-10">
+    <a href="/dashboard" className="text-sm text-blue-700">← Dashboard</a>
+    <h1 className="mt-3 text-3xl font-bold">Team &amp; Invitations</h1>
+    <p className="muted mt-2">Invite teammates, review invitation status, and manage account access.</p>
+    <section className="panel mt-6 p-5 md:p-6"><h2 className="mb-4 font-semibold">Invite a team member</h2><InvitePartnerForm/></section>
+    <div className="mt-6"><TeamAdminPanel/></div>
+  </main>;
+}
