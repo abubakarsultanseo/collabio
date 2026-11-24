@@ -37,7 +37,7 @@ export async function POST(request:Request){
 
     const token=randomBytes(32).toString("base64url");
     const tokenHash=createHash("sha256").update(token).digest("hex");
-    const hours=Math.min(168,Math.max(1,Number(process.env.INVITATION_EXPIRY_HOURS??72)));
+    const hours=Math.min(168,Math.max(1,Number(process.env.INVITATION_EXPIRY_HOURS??48)));
     const expiresAt=new Date(Date.now()+hours*3600000).toISOString();
     const {data:invite,error:inviteError}=await admin.from("invitations").insert({email,full_name:input.name,company:input.company||null,website:input.website||null,token_hash:tokenHash,expires_at:expiresAt,invited_by:user.id,status:"pending"}).select("id").single();
     if(inviteError)throw inviteError;

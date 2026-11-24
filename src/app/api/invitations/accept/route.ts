@@ -42,6 +42,9 @@ export async function POST(request:Request){
     const {error:permissionError}=await admin.from("partner_permissions").upsert({partner_id:userId},{onConflict:"partner_id"});
     if(permissionError)throw permissionError;
 
+    const {error:workspaceError}=await admin.from("partnerships").upsert({name:invite.full_name,user_a_id:invite.invited_by,user_b_id:userId,created_by:invite.invited_by},{onConflict:"user_a_id,user_b_id"});
+    if(workspaceError)throw workspaceError;
+
     const {error:acceptedError}=await admin.from("invitations").update({status:"accepted",accepted_at:new Date().toISOString()}).eq("id",invite.id).eq("status","pending");
     if(acceptedError)throw acceptedError;
     const {error:notificationError}=await admin.from("notifications").insert({recipient_id:invite.invited_by,type:"invitation_accepted",title:"Invitation Accepted",description:`${invite.full_name} accepted the invitation.`,actor_id:userId});

@@ -1,36 +1,63 @@
+import Link from "next/link";
+import {ArrowUpRight,CheckCircle2,Clock3,Inbox,Send,Users} from "lucide-react";
 import {requireUser} from "@/server/auth";
 import {getProfile} from "@/server/profile";
 import {createAdminClient} from "@/lib/supabase/admin";
-import Link from "next/link";
+
+function formatDate(value:string){return new Intl.DateTimeFormat("en-PK",{dateStyle:"medium",timeStyle:"short",timeZone:"Asia/Karachi"}).format(new Date(value));}
 
 export default async function Dashboard(){
   const user=await requireUser();
   const profile=await getProfile(user.id);
+  const adminView=profile?.role==="admin";
   const db=createAdminClient();
-  const {data:partnerships}=await db.from("partnerships").select("id,name,user_a_id,user_b_id").or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`).order("created_at",{ascending:false});
-  const ids=(partnerships??[]).map(p=>p.id);
-  const [{data:balances},{data:requests}]=await Promise.all([
-    ids.length?db.from("deal_balance").select("*").in("partnership_id",ids):Promise.resolve({data:[]}),
-    ids.length?db.from("requests").select("id,partnership_id,status,shared_at").in("partnership_id",ids):Promise.resolve({data:[]}),
+  const partnershipQuery=db.from("partnerships").select("id,name,user_a_id,user_b_id,created_at").order("created_at",{ascending:false});
+  const {data:partnerships,error:partnershipError}=adminView?await partnershipQuery:await partnershipQuery.or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`);
+  if(partnershipError)throw new Error(partnershipError.message);
+  const rows=partnerships??[];
+  const ids=rows.map(row=>row.id);
+  const [{data:requests,error:requestsError},{count:activePartnerCount,error:countError}]=await Promise.all([
+    ids.length?db.from("requests").select("id,partnership_id,sender_id,receiver_id,partner_id,status,anchor_text,placement_page_url,deadline_at,first_viewed_at,was_overdue,created_at,request_type").in("partnership_id",ids).order("created_at",{ascending:false}).limit(200):Promise.resolve({data:[],error:null}),
+    adminView?db.from("profiles").select("id",{count:"exact",head:true}).eq("role","partner").eq("account_status","active"):Promise.resolve({count:1,error:null}),
   ]);
-  const allDeals=balances??[];
-  const openDeals=allDeals.filter(d=>d.status==="open").length;
-  const pending=allDeals.reduce((n,d)=>n+Number(d.side_a_pending)+Number(d.side_b_pending),0);
-  const staleCutoff=Date.now()-7*86400000;
-  const stale=(requests??[]).filter(r=>r.status==="shared"&&r.shared_at&&new Date(r.shared_at).getTime()<=staleCutoff).length;
-  const cards=(partnerships??[]).map(p=>{
-    const mySide=p.user_a_id===user.id?"a":"b";
-    const deals=allDeals.filter(d=>d.partnership_id===p.id);
-    const myDue=deals.reduce((n,d)=>n+Number(mySide==="a"?d.side_a_remaining:d.side_b_remaining),0);
-    const partnerDue=deals.reduce((n,d)=>n+Number(mySide==="a"?d.side_b_remaining:d.side_a_remaining),0);
-    return {id:p.id,name:p.name,deals,myDue,partnerDue,net:partnerDue-myDue,mySide};
+  if(requestsError)throw new Error(requestsError.message);
+  if(countError)throw new Error(countError.message);
+  const all=requests??[];
+  const today=new Date();today.setHours(0,0,0,0);
+  const receivedToday=all.filter(row=>row.receiver_id===user.id&&new Date(row.created_at)>=today).length;
+  const sentToday=all.filter(row=>row.sender_id===user.id&&new Date(row.created_at)>=today).length;
+  const awaitingReview=all.filter(row=>row.receiver_id===user.id&&!row.first_viewed_at&&row.status==="new_request").length;
+  const overdue=all.filter(row=>row.was_overdue||row.status==="overdue"||(new Date(row.deadline_at)<new Date()&&!row.first_viewed_at)).length;
+  const live=all.filter(row=>row.status==="live").length;
+  const recent=all.slice(0,8);
+  const partnerStats=rows.map(partnership=>{
+    const counterpartId=partnership.user_a_id===user.id?partnership.user_b_id:partnership.user_a_id;
+    const count=all.filter(row=>row.partnership_id===partnership.id).length;
+    const inbound=all.filter(row=>row.partnership_id===partnership.id&&row.receiver_id===user.id).length;
+    const outbound=all.filter(row=>row.partnership_id===partnership.id&&row.sender_id===user.id).length;
+    return {id:partnership.id,name:partnership.name,counterpartId,count,inbound,outbound};
   });
-  return <main className="min-h-screen p-6 md:p-10"><div className="mx-auto max-w-6xl">
-    <header className="flex items-center justify-between"><div><p className="text-sm font-semibold text-blue-700">COLLABIO</p><h1 className="mt-2 text-3xl font-bold">Welcome, {profile?.full_name??user.email}</h1><p className="muted mt-2">Your shared outreach partnerships and link exchange activity.</p></div><form action="/auth/signout" method="post"><button className="rounded-lg border px-4 py-2">Sign out</button></form></header>
-    <section className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[["Partnerships",partnerships?.length??0],["Open deals",openDeals],["Pending requests",pending],["Shared 7+ days",stale]].map(([label,value])=><div key={String(label)} className="panel p-5"><p className="muted text-sm">{label}</p><p className="mt-2 text-3xl font-bold">{value}</p></div>)}</section>
-    <section className="mt-7"><div className="mb-3 flex items-center justify-between"><h2 className="text-xl font-semibold">Partner Summary</h2><Link href="/partnerships" className="text-sm font-medium text-blue-700">View all partnerships →</Link></div>
-      {cards.length===0?<div className="panel p-5 text-sm text-slate-600">No partnerships yet. Create one and invite the other active Collabio user to share deals and requests.</div>:<div className="grid gap-3 lg:grid-cols-2">{cards.map(p=><article key={p.id} className="panel p-5"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold">{p.name}</h3><p className="muted mt-1 text-sm">{p.net>0?`Partner owes you ${p.net} slot${p.net===1?"":"s"}`:p.net<0?`You owe partner ${Math.abs(p.net)} slot${Math.abs(p.net)===1?"":"s"}`:"All square"}</p></div><Link href={`/partnerships/${p.id}`} className="text-sm text-blue-700">Open →</Link></div><p className="muted mt-3 text-xs">Remaining slots (you / partner): {p.myDue} / {p.partnerDue}</p><div className="mt-3 space-y-2">{p.deals.filter(d=>d.status==="open").map(d=><div key={d.deal_id} className="flex justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm"><span>{d.name} · {p.mySide==="a"?d.side_a_quota:d.side_b_quota}:{p.mySide==="a"?d.side_b_quota:d.side_a_quota}</span><span>You {p.mySide==="a"?d.side_a_remaining:d.side_b_remaining} · Partner {p.mySide==="a"?d.side_b_remaining:d.side_a_remaining}</span></div>)}</div>{p.deals.length===0&&<p className="muted mt-3 text-xs">No deals created yet.</p>}</article>)}</div>}
+  const profileIds=[...new Set(recent.flatMap(row=>[row.sender_id,row.receiver_id]))];
+  const {data:people}=profileIds.length?await db.from("profiles").select("id,full_name,email").in("id",profileIds):{data:[]};
+  const personMap=Object.fromEntries((people??[]).map(person=>[person.id,person]));
+  const statCards=adminView?[
+    {label:"Active Partners",value:activePartnerCount??0,icon:Users,color:"text-slate-700"},
+    {label:"Total Requests",value:all.length,icon:Inbox,color:"text-slate-700"},
+    {label:"Live Placements",value:live,icon:CheckCircle2,color:"text-emerald-700"},
+    {label:"Overdue Requests",value:overdue,icon:Clock3,color:"text-red-600"},
+  ]:[
+    {label:"Requests Received",value:all.filter(row=>row.receiver_id===user.id).length,icon:Inbox,color:"text-slate-700"},
+    {label:"Requests Sent",value:all.filter(row=>row.sender_id===user.id).length,icon:Send,color:"text-slate-700"},
+    {label:"Live Placements",value:live,icon:CheckCircle2,color:"text-emerald-700"},
+    {label:"Pending & Overdue",value:overdue,icon:Clock3,color:"text-red-600"},
+  ];
+  return <main className="mx-auto max-w-[1440px] space-y-6 p-5 md:p-8 lg:p-10">
+    <header className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-blue-700">{adminView?"Company-wide admin workspace":"Private partner workspace"}</p><h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">{adminView?"Admin Dashboard":"Welcome back, "+(profile?.full_name??user.email)}</h1><p className="muted mt-2">{adminView?"A current view of partners, requests, and placement activity.":"Your collaboration activity and upcoming deadlines."}</p></div><Link href="/requests/inbox" className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800">Open requests <ArrowUpRight size={16}/></Link></header>
+    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{statCards.map(({label,value,icon:Icon,color})=><article key={label} className="panel p-5"><Icon className={color} size={18}/><p className="mt-4 text-3xl font-bold text-slate-900">{value}</p><p className="muted mt-1 text-sm">{label}</p></article>)}</section>
+    <section className="grid gap-5 xl:grid-cols-[1.5fr_1fr]">
+      <article className="panel overflow-hidden"><div className="flex items-center justify-between border-b px-5 py-4"><div><h2 className="font-semibold text-slate-900">Recent requests</h2><p className="muted mt-1 text-xs">Latest collaboration updates</p></div><Link className="text-sm font-medium text-blue-700" href="/requests/inbox">View inbox →</Link></div>{recent.length===0?<div className="p-8 text-center"><p className="font-medium">No requests yet</p><p className="muted mt-1 text-sm">Open a collaboration workspace to create the first request.</p><Link className="mt-3 inline-block text-sm font-semibold text-blue-700" href="/partnerships">Browse collaborations</Link></div>:<div className="divide-y">{recent.map(row=>{const sent=row.sender_id===user.id;const peer=personMap[sent?row.receiver_id:row.sender_id];return <Link key={row.id} href={sent?"/requests/sent":"/requests/inbox"} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 hover:bg-slate-50"><span className="min-w-0"><span className="block truncate font-medium text-slate-900">{row.anchor_text||"Collaboration request"}</span><span className="muted mt-1 block text-xs">{sent?"Sent to":"From"} {peer?.full_name??"Partner"} · {formatDate(row.created_at)}</span></span><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs capitalize text-slate-700">{String(row.status).replaceAll("_"," ")}</span></Link>;})}</div>}</article>
+      <article className="panel p-5"><div className="flex items-center justify-between"><div><h2 className="font-semibold">Today &amp; deadlines</h2><p className="muted mt-1 text-xs">Requests needing attention</p></div><Clock3 size={18} className="text-slate-500"/></div><div className="mt-5 grid grid-cols-2 gap-3"><div className="rounded-xl bg-slate-50 p-4"><p className="text-2xl font-bold">{awaitingReview}</p><p className="muted mt-1 text-xs">Waiting to be seen</p></div><div className="rounded-xl bg-slate-50 p-4"><p className="text-2xl font-bold">{receivedToday}</p><p className="muted mt-1 text-xs">Received today</p></div><div className="rounded-xl bg-slate-50 p-4"><p className="text-2xl font-bold">{sentToday}</p><p className="muted mt-1 text-xs">Sent today</p></div><div className="rounded-xl bg-red-50 p-4"><p className="text-2xl font-bold text-red-700">{overdue}</p><p className="mt-1 text-xs text-red-700">Overdue</p></div></div><Link href="/pending-overdue" className="mt-4 block text-sm font-semibold text-blue-700">Review pending &amp; overdue →</Link></article>
     </section>
-    <section className="panel mt-7 p-6"><h2 className="text-lg font-semibold">Account details</h2><dl className="mt-4 grid gap-4 text-sm md:grid-cols-2"><div><dt className="muted">Email</dt><dd>{user.email}</dd></div><div><dt className="muted">Role</dt><dd>{profile?.role??"Pending profile"}</dd></div><div><dt className="muted">Account status</dt><dd>{profile?.account_status??"Unknown"}</dd></div><div><dt className="muted">Timezone</dt><dd>Asia/Karachi</dd></div></dl></section>
-  </div></main>
+    <section className="panel"><div className="flex items-center justify-between border-b px-5 py-4"><div><h2 className="font-semibold">Partner workspaces</h2><p className="muted mt-1 text-xs">Requests received and sent by workspace</p></div><Link href="/partnerships" className="text-sm font-medium text-blue-700">All collaborations →</Link></div>{partnerStats.length===0?<p className="muted p-5 text-sm">No active collaboration workspaces yet. Accepting a partner invitation will create one.</p>:<div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">{partnerStats.map(partner=><Link key={partner.id} href={`/partnerships/${partner.id}`} className="rounded-xl border border-slate-200 p-4 transition hover:border-slate-300 hover:bg-slate-50"><div className="flex items-center justify-between"><h3 className="font-semibold">{partner.name}</h3><ArrowUpRight size={15} className="text-slate-400"/></div><p className="muted mt-2 text-sm">{partner.inbound} received · {partner.outbound} sent</p></Link>)}</div>}</section>
+  </main>;
 }
