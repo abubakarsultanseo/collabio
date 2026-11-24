@@ -36,7 +36,7 @@ async function accessiblePartnershipIds(userId:string,role:string,db:ReturnType<
 export async function GET(request:Request){
   try{
     const current=await session();if("error" in current)return current.error;
-    const url=new URL(request.url);const partnershipId=url.searchParams.get("partnershipId");const scope=url.searchParams.get("scope");const status=url.searchParams.get("status");const search=(url.searchParams.get("q")??"").replace(/[,%()\\]/g," ").trim().slice(0,80);
+    const url=new URL(request.url);const partnershipId=url.searchParams.get("partnershipId");const scope=url.searchParams.get("scope");const status=url.searchParams.get("status");const requestType=url.searchParams.get("type");const direction=url.searchParams.get("direction");const createdFrom=url.searchParams.get("createdFrom");const createdTo=url.searchParams.get("createdTo");const search=(url.searchParams.get("q")??"").replace(/[,%()\\]/g," ").trim().slice(0,80);
     const db=createAdminClient();const accessibleIds=await accessiblePartnershipIds(current.user.id,current.role,db);
     if(partnershipId&&!accessibleIds.includes(partnershipId))return NextResponse.json({error:"Workspace access denied."},{status:403});
     const ids=partnershipId?[partnershipId]:accessibleIds;
@@ -49,9 +49,14 @@ export async function GET(request:Request){
     if(scope==="inbox")query=query.eq("receiver_id",current.user.id);
     if(scope==="sent")query=query.eq("sender_id",current.user.id);
     if(scope==="pending")query=query.not("status","in","(live,rejected,cancelled)");
-    if(scope==="overdue")query=query.or("was_overdue.eq.true,status.eq.overdue");
+    if(scope==="overdue")query=query.eq("was_overdue",true);
     if(status)query=query.eq("status",status);
-    if(search)query=query.or(["anchor_text","placement_page_url","target_link","request_code::text"].filter(field=>!field.includes("::")).map(field=>`${field}.ilike.%${search}%`).join(","));
+    if(partnershipId)query=query.eq("partnership_id",partnershipId);
+    if(requestType&&["guest_post","link_insertion","other"].includes(requestType))query=query.eq("request_type",requestType);
+    if(direction==="sent")query=query.eq("sender_id",current.user.id);if(direction==="received")query=query.eq("receiver_id",current.user.id);
+    if(createdFrom&&/^\d{4}-\d{2}-\d{2}$/.test(createdFrom))query=query.gte("created_at",`${createdFrom}T00:00:00.000Z`);
+    if(createdTo&&/^\d{4}-\d{2}-\d{2}$/.test(createdTo)){const end=new Date(`${createdTo}T00:00:00.000Z`);end.setUTCDate(end.getUTCDate()+1);query=query.lt("created_at",end.toISOString());}
+    if(search){const terms=[`anchor_text.ilike.%${search}%`,`placement_page_url.ilike.%${search}%`,`target_link.ilike.%${search}%`,`instructions.ilike.%${search}%`,`notes.ilike.%${search}%`];if(/^\d+$/.test(search))terms.push(`request_code.eq.${Number(search)}`);query=query.or(terms.join(","));}
     const {data,error}=await query.limit(500);if(error)throw error;
     const rows=data??[];const partyIds=[...new Set(rows.flatMap(item=>[item.sender_id,item.receiver_id,item.partner_id]))];
     const [{data:profiles},{data:partnerships}]=await Promise.all([

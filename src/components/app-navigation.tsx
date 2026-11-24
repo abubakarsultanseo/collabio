@@ -7,12 +7,13 @@ import {Activity,ArrowLeftRight,Bell,ChevronLeft,Clock3,Inbox,LayoutDashboard,Me
 const mainItems=[
   {label:"Dashboard",href:"/dashboard",icon:LayoutDashboard},
   {label:"My Partners",href:"/partners",icon:Users},
-  {label:"Collaborations",href:"/partnerships",icon:ArrowLeftRight},
-  {label:"Requests Inbox",href:"/requests/inbox",icon:Inbox},
-  {label:"Requests Sent",href:"/requests/sent",icon:Send},
+  {label:"Partner Workspaces",href:"/partnerships",icon:ArrowLeftRight},
+  {label:"Received Requests",href:"/requests/inbox",icon:Inbox},
+  {label:"Sent Requests",href:"/requests/sent",icon:Send},
   {label:"Notifications",href:"/notifications",icon:Bell},
   {label:"Pending & Overdue",href:"/pending-overdue",icon:Clock3},
   {label:"Messages",href:"/messages",icon:MessageSquare},
+  {label:"Monthly Reports",href:"/reports",icon:Activity},
   {label:"Activity History",href:"/activity-history",icon:Activity},
 ];
 const adminItems=[

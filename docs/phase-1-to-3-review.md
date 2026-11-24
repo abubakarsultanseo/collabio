@@ -7,7 +7,8 @@
 - Collaboration core: requests in both directions inside the same admin-partner workspace; request number, source page, anchor, target URL, request type, instructions, notes, created/updated times, first-viewed time, 24-hour deadline, and status.
 - Request views: inbox, sent, pending/overdue, filters, search, editable request fields, status updates, and a shared message thread.
 - Activity and alerts: in-app notifications, unread tracking, request activity, comments, event emails for new requests/views/status/comments, 12-hour reminder jobs, and 24-hour overdue jobs. GitHub Actions invokes the secured reminder endpoint every 30 minutes to support Vercel Hobby deployments. Reminder email uses Resend when configured.
-- Dashboard and UI: responsive left sidebar and mobile menu, admin and partner metrics, recent requests, deadlines, partner workspaces, and responsive forms/lists.
+- Dashboard and UI: responsive left sidebar and mobile menu, admin and partner metrics, recent requests, deadlines, partner workspaces, and responsive forms/lists. Dashboard quick actions show where to send requests, review received work, and track sent work.
+- Phase 4/5 additions: monthly reports with workspace and status breakdowns; filtered Excel exports; bulk entry of up to 50 requests per workspace submission; advanced request filters for workspace, type, direction, and date range; request-centered message threads.
 - SEO partner directory from migration `0004_seo_partners.sql` remains available in each workspace, with admin cross-workspace review.
 
 ## Database migration order
@@ -30,4 +31,6 @@
 - Two-account RLS behavior and role/permission enforcement against the live Supabase project.
 - Live invitation acceptance, Google OAuth, Resend delivery, and scheduled GitHub Actions execution.
 - Email delivery, including event and reminder messages, depends on verified Resend sender settings.
-- CSV/Excel exports and monthly reports from Phase 5/4 expansion.
+- Live authorization for report downloads and exports must still be checked against the production Supabase project.
+- The 30-minute GitHub Actions schedule and Resend delivery need a live deployment check; timing depends on GitHub's scheduled workflow availability.
+- Bulk request submissions and advanced filters have been added but still need end-to-end verification against real partner accounts.

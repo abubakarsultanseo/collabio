@@ -4,7 +4,7 @@ Collabio is an invite-only collaboration workspace for managing SEO outreach par
 
 ## Current build status
 
-This update follows the supplied five-phase product brief: invite and permission management, private SEO partner directories, two-way partner workspaces, request inbox/sent views, status and activity history, in-app notifications, messages, a responsive sidebar, and an activity dashboard. A scheduled job handles 12-hour reminders and 24-hour overdue alerts. Review [`docs/phase-1-to-3-review.md`](docs/phase-1-to-3-review.md) and [`docs/deal-system.md`](docs/deal-system.md) before deploying.
+This update follows the supplied five-phase product brief: invite and permission management, two-way partner workspaces, request inbox/sent views, status and activity history, in-app notifications, request discussions, monthly reports, Excel exports, bulk request entry, advanced filters, and responsive dashboards. A scheduled job handles 12-hour reminders and 24-hour overdue alerts. Review [`docs/phase-1-to-3-review.md`](docs/phase-1-to-3-review.md) and [`docs/deal-system.md`](docs/deal-system.md) before deploying.
 
 ## Stack
 - Next.js App Router, React, TypeScript, Tailwind CSS
