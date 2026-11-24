@@ -3,7 +3,7 @@ import { useToast } from "@/components/app/toast";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { StatusBadge, formatStatus } from "@/components/status-badge";
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { useRequestChat } from "@/components/chat/use-request-chat";
 import {
   FileSpreadsheet,
   Inbox,
@@ -204,6 +204,13 @@ export default function RequestListWorkspace({
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
+  const matchingRows = rows.filter(
+    (row) =>
+      (!status || row.status === status) &&
+      (scope !== "pending" ||
+        !["live", "rejected", "cancelled"].includes(row.status)),
+  );
+  const { counts: unreadChats, openRequestChat } = useRequestChat(matchingRows);
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [advanced, setAdvanced] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -221,6 +228,9 @@ export default function RequestListWorkspace({
   const [loading, setLoading] = useState(true);
   const latestLoad = useRef(0);
   const mutation = useRef(false);
+  const marking = useRef(new Set<string>());
+  const recentEdits = useRef(new Map<string, Partial<Row> | null>());
+  const previousSearch = useRef("");
   const presetKey = `collabio-request-filters:${scope}`;
 
   useEffect(() => {
@@ -256,6 +266,7 @@ export default function RequestListWorkspace({
   }, []);
   const load = useCallback(async () => {
     const loadId = ++latestLoad.current;
+    recentEdits.current.clear();
     try {
       const params = new URLSearchParams({ scope });
       if (search.trim()) params.set("q", search.trim());
@@ -272,7 +283,13 @@ export default function RequestListWorkspace({
       const data = await response.json();
       if (!response.ok)
         throw new Error(data.error ?? "Could not load requests.");
-      if (loadId === latestLoad.current) setRows(data.requests ?? []);
+      if (loadId === latestLoad.current) {
+        const patched = ((data.requests ?? []) as Row[]).flatMap((row) => {
+          const edit = recentEdits.current.get(row.id);
+          return edit === null ? [] : [{ ...row, ...edit }];
+        });
+        setRows(patched);
+      }
     } catch (caught) {
       if (loadId !== latestLoad.current) return;
       notify(
@@ -284,9 +301,70 @@ export default function RequestListWorkspace({
     }
   }, [scope, search, status, filters, notify]);
   useEffect(() => {
+    const changedSearch = previousSearch.current !== search;
+    previousSearch.current = search;
+    if (!changedSearch) {
+      void load();
+      return;
+    }
     const timer = window.setTimeout(() => void load(), 200);
     return () => window.clearTimeout(timer);
-  }, [load]);
+  }, [load, search]);
+
+  const mergeRow = useCallback((patch: Partial<Row> & { id: string }) => {
+    recentEdits.current.set(patch.id, {
+      ...recentEdits.current.get(patch.id),
+      ...patch,
+    });
+    setRows((current) =>
+      current.map((item) =>
+        item.id === patch.id ? { ...item, ...patch } : item,
+      ),
+    );
+    setEditing((current) =>
+      current?.id === patch.id ? { ...current, ...patch } : current,
+    );
+  }, []);
+
+  useEffect(() => {
+    function onUpdate(event: Event) {
+      mergeRow((event as CustomEvent<{ id: string; status: string }>).detail);
+    }
+    window.addEventListener("collabio:request-updated", onUpdate);
+    return () =>
+      window.removeEventListener("collabio:request-updated", onUpdate);
+  }, [mergeRow]);
+
+  async function markSeen(row: Row) {
+    if (row.first_viewed_at || marking.current.has(row.id)) return;
+    marking.current.add(row.id);
+    try {
+      const response = await fetch("/api/requests", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: row.id, markSeen: true }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.request) {
+          // Only apply the automatic transition if the user has not changed status.
+          const { status, ...viewed } = data.request;
+          mergeRow(viewed);
+          if (status === "seen") {
+            const transition = (item: Row) =>
+              item.id === row.id && item.status === "new_request"
+                ? { ...item, status }
+                : item;
+            setRows((current) => current.map(transition));
+            setEditing((current) => (current ? transition(current) : current));
+          }
+        }
+      }
+    } finally {
+      marking.current.delete(row.id);
+    }
+  }
+
   async function update(row: Row, body: Record<string, unknown>) {
     if (mutation.current) return;
     mutation.current = true;
@@ -305,16 +383,9 @@ export default function RequestListWorkspace({
       const data = await response.json();
       if (!response.ok)
         throw new Error(data.error ?? "Could not update request.");
-      if (nextStatus) {
-        setRows((current) =>
-          current.map((item) =>
-            item.id === row.id ? { ...item, status: nextStatus } : item,
-          ),
-        );
-      }
-      await load();
+      if (data.request) mergeRow(data.request);
       if (nextStatus) setFeedback({ id: row.id, text: "Saved ✓" });
-      else if (!body.markSeen) notify("Request updated.");
+      else notify("Request updated.");
     } catch (caught) {
       if (nextStatus) setFeedback({ id: row.id, text: "Save failed" });
       notify(
@@ -342,7 +413,8 @@ export default function RequestListWorkspace({
         throw new Error(data.error ?? "Could not delete request.");
       setDeleteTarget(null);
       notify(`Request #${row.request_code} deleted.`);
-      await load();
+      recentEdits.current.set(row.id, null);
+      setRows((current) => current.filter((item) => item.id !== row.id));
     } catch (caught) {
       notify(
         caught instanceof Error ? caught.message : "Could not delete request.",
@@ -373,7 +445,29 @@ export default function RequestListWorkspace({
   function openRequest(row: Row) {
     setEditing(row);
     if (scope === "inbox" && !row.first_viewed_at)
-      void update(row, { markSeen: true });
+      void markSeen(row).catch(() => {});
+  }
+
+  function chatButton(row: Row, className: string) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className={cn(rowAction, className)}
+        onClick={() => openRequestChat(row)}
+      >
+        <MessageSquare size={12} aria-hidden /> Chat
+        {unreadChats[row.id] > 0 && (
+          <span
+            className="rounded-full bg-[var(--brand-soft)] px-1.5 text-[var(--brand-dark)]"
+            aria-label={`${unreadChats[row.id]} unread messages`}
+          >
+            {unreadChats[row.id]}
+          </span>
+        )}
+      </Button>
+    );
   }
 
   function statusControls(row: Row) {
@@ -616,7 +710,7 @@ export default function RequestListWorkspace({
         <p role="status" className="os-card p-5 text-sm text-[var(--muted)]">
           Loading requests…
         </p>
-      ) : rows.length === 0 ? (
+      ) : matchingRows.length === 0 ? (
         <EmptyState
           icon={Inbox}
           title="No requests match these filters."
@@ -625,7 +719,8 @@ export default function RequestListWorkspace({
       ) : (
         <section className="space-y-2" aria-label="Request results">
           <p className="text-xs text-[var(--muted)]">
-            Showing {rows.length} request{rows.length === 1 ? "" : "s"}
+            Showing {matchingRows.length} request
+            {matchingRows.length === 1 ? "" : "s"}
           </p>
           <div
             tabIndex={0}
@@ -646,7 +741,7 @@ export default function RequestListWorkspace({
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)]">
-                {rows.map((row) => {
+                {matchingRows.map((row) => {
                   const counterpart =
                     (scope === "sent" ? row.receiver : row.sender)?.full_name ??
                     "Partner";
@@ -674,6 +769,7 @@ export default function RequestListWorkspace({
                         >
                           {row.workspace?.name ?? "Workspace"}
                         </div>
+                        {chatButton(row, "mt-2 md:hidden")}
                       </td>
                       <td className="px-4 py-3">
                         <div className="max-w-32 truncate" title={counterpart}>
@@ -706,19 +802,7 @@ export default function RequestListWorkspace({
                           >
                             <Pencil size={12} aria-hidden /> Edit
                           </Button>
-                          <Link
-                            href={`/messages?request=${row.id}`}
-                            className={cn(
-                              buttonVariants({
-                                variant: "outline",
-                                size: "sm",
-                              }),
-                              rowAction,
-                            )}
-                          >
-                            <MessageSquare size={12} aria-hidden /> Open
-                            discussion
-                          </Link>
+                          {chatButton(row, "hidden md:inline-flex")}
                           <Button
                             type="button"
                             variant="outline"

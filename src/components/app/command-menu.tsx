@@ -6,14 +6,14 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { adminItems, workspaceItems } from "@/components/app/nav-items";
+import { adminItems, workspaceNav } from "@/components/app/nav-items";
 
 export function CommandMenu({ isAdmin }: { isAdmin: boolean }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const input = useRef<HTMLInputElement>(null);
   const firstResult = useRef<HTMLAnchorElement>(null);
-  const items = isAdmin ? [...workspaceItems, ...adminItems] : workspaceItems;
+  const items = [...workspaceNav(isAdmin), ...(isAdmin ? adminItems : [])];
   const matches = items.filter((item) =>
     item.label.toLowerCase().includes(query.trim().toLowerCase()),
   );

@@ -45,10 +45,10 @@ export const workspaceItems: NavItem[] = [
   { label: "Notifications", href: "/notifications", icon: Bell },
   { label: "Pending & Overdue", href: "/pending-overdue", icon: Clock3 },
   {
-    label: "Messages",
+    label: "Chats",
     href: "/messages",
     icon: MessageSquare,
-    mobileLabel: "Messages",
+    mobileLabel: "Chats",
   },
   { label: "Monthly Reports", href: "/reports", icon: BarChart3 },
   { label: "Activity History", href: "/activity-history", icon: Activity },
@@ -62,4 +62,13 @@ export const adminItems: NavItem[] = [
 
 export function isActivePage(path: string, href: string) {
   return path === href || path.startsWith(href + "/");
+}
+
+export function workspaceNav(isAdmin: boolean) {
+  if (isAdmin) return workspaceItems;
+  return workspaceItems.map((item) =>
+    item.href === "/messages"
+      ? { ...item, label: "Chat with Abubakar", mobileLabel: "Chat" }
+      : item,
+  );
 }

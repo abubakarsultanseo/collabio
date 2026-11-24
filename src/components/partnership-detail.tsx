@@ -1,4 +1,5 @@
 "use client";
+import { useRequestChat } from "@/components/chat/use-request-chat";
 import { EmptyState } from "@/components/app/empty-state";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -109,6 +110,26 @@ export default function PartnershipDetail({
       ),
     [requests, filter, currentUserId],
   );
+  const { counts: unreadChats, openRequestChat } = useRequestChat(shown);
+  const mergeRow = useCallback(
+    (patch: Partial<RequestRow> & { id: string }) => {
+      setRequests((current) =>
+        current.map((row) =>
+          row.id === patch.id ? { ...row, ...patch } : row,
+        ),
+      );
+    },
+    [],
+  );
+
+  useEffect(() => {
+    function onUpdate(event: Event) {
+      mergeRow((event as CustomEvent<{ id: string; status: string }>).detail);
+    }
+    window.addEventListener("collabio:request-updated", onUpdate);
+    return () =>
+      window.removeEventListener("collabio:request-updated", onUpdate);
+  }, [mergeRow]);
   const load = useCallback(async () => {
     const response = await fetch(`/api/requests?partnershipId=${id}`, {
       cache: "no-store",
@@ -158,7 +179,7 @@ export default function PartnershipDetail({
       const data = await response.json();
       if (!response.ok)
         throw new Error(data.error ?? "Could not update request status.");
-      await load();
+      if (data.request) mergeRow(data.request);
     } catch (caught) {
       notify(
         caught instanceof Error
@@ -170,12 +191,15 @@ export default function PartnershipDetail({
   }
   async function markSeen(row: RequestRow) {
     if (row.receiver_id !== currentUserId || row.first_viewed_at) return;
-    await fetch("/api/requests", {
+    const response = await fetch("/api/requests", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: row.id, markSeen: true }),
     });
-    await load();
+    if (response.ok) {
+      const data = await response.json();
+      if (data.request) mergeRow(data.request);
+    }
   }
   return (
     <div className="page-enter mx-auto max-w-6xl space-y-6">
@@ -341,12 +365,6 @@ export default function PartnershipDetail({
               See both directions and update request progress.
             </p>
           </div>
-          <Link
-            href={`/messages?request=${shown[0]?.id ?? ""}`}
-            className="text-sm font-semibold text-[var(--brand-dark)]"
-          >
-            Open messages →
-          </Link>
         </div>
         <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
           {[
@@ -376,7 +394,7 @@ export default function PartnershipDetail({
             {shown.map((row) => (
               <article
                 key={row.id}
-                onClick={() => void markSeen(row)}
+                onClick={() => void markSeen(row).catch(() => {})}
                 className="os-card p-4 md:p-5"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -426,13 +444,25 @@ export default function PartnershipDetail({
                     })}
                   </span>
                   <div className="flex items-center gap-3">
-                    <Link
-                      onClick={(event) => event.stopPropagation()}
-                      href={`/messages?request=${row.id}`}
-                      className="text-xs font-semibold text-[var(--brand-dark)]"
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openRequestChat(row);
+                      }}
                     >
-                      Discuss
-                    </Link>
+                      Chat{" "}
+                      {unreadChats[row.id] > 0 && (
+                        <span
+                          className="rounded-full bg-[var(--brand-soft)] px-1.5 text-[var(--brand-dark)]"
+                          aria-label={`${unreadChats[row.id]} unread messages`}
+                        >
+                          {unreadChats[row.id]}
+                        </span>
+                      )}
+                    </Button>
                     <label
                       className="flex items-center gap-2 text-xs"
                       onClick={(event) => event.stopPropagation()}

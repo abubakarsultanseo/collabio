@@ -1,3 +1,4 @@
+import { ChatHost } from "@/components/chat/chat-drawer";
 import { Suspense, type ReactNode } from "react";
 import NavigationProgress from "@/components/app/navigation-progress";
 import AppNavigation from "@/components/app-navigation";
@@ -20,19 +21,21 @@ export default async function WorkspaceLayout({
         <NavigationProgress />
       </Suspense>
       <AppNavigation isAdmin={role === "admin"} />
-      <main className="min-h-screen min-w-0 pb-24 lg:ml-60 lg:pb-0">
-        <div className="w-full px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
-          <Topbar
-            profile={{
-              name: profile?.full_name || user.email || "Account",
-              email: profile?.email ?? user.email ?? "",
-              role,
-              status: profile?.account_status ?? "active",
-            }}
-          />
-          {children}
-        </div>
-      </main>
+      <ChatHost>
+        <main className="min-h-screen min-w-0 pb-24 lg:ml-60 lg:pb-0">
+          <div className="w-full px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
+            <Topbar
+              profile={{
+                name: profile?.full_name || user.email || "Account",
+                email: profile?.email ?? user.email ?? "",
+                role,
+                status: profile?.account_status ?? "active",
+              }}
+            />
+            {children}
+          </div>
+        </main>
+      </ChatHost>
     </>
   );
 }

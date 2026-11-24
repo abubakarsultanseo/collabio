@@ -8,7 +8,7 @@ import { Brand } from "@/components/app/brand";
 import {
   adminItems,
   isActivePage,
-  workspaceItems,
+  workspaceNav,
   type NavItem,
 } from "@/components/app/nav-items";
 import { cn } from "@/lib/utils";
@@ -102,6 +102,7 @@ export default function AppNavigation({ isAdmin }: { isAdmin: boolean }) {
   const path = usePathname();
   const more = useRef<HTMLDetailsElement>(null);
   const moreTrigger = useRef<HTMLElement>(null);
+  const workspaceItems = workspaceNav(isAdmin);
   const overflow = workspaceItems.filter((item) => !item.mobileLabel);
   const moreActive = [...overflow, ...(isAdmin ? adminItems : [])].some(
     (item) => isActivePage(path, item.href),

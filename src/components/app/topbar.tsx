@@ -5,7 +5,7 @@ import { CommandMenu } from "@/components/app/command-menu";
 import {
   adminItems,
   isActivePage,
-  workspaceItems,
+  workspaceNav,
 } from "@/components/app/nav-items";
 import { ProfileMenu, type MenuProfile } from "@/components/app/profile-menu";
 import { ThemeToggle } from "@/components/app/theme-toggle";
@@ -13,7 +13,7 @@ import { ThemeToggle } from "@/components/app/theme-toggle";
 export function Topbar({ profile }: { profile: MenuProfile }) {
   const path = usePathname();
   const isAdmin = profile.role === "admin";
-  const page = [...workspaceItems, ...(isAdmin ? adminItems : [])].find(
+  const page = [...workspaceNav(isAdmin), ...(isAdmin ? adminItems : [])].find(
     (item) => isActivePage(path, item.href),
   );
 
