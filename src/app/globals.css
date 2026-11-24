@@ -75,8 +75,7 @@ button:not(:disabled):active {
   transform: translateY(1px);
 }
 
-.os-card,
-.panel {
+.os-card {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 1rem;
@@ -106,8 +105,7 @@ button:not(:disabled):active {
   background: color-mix(in srgb, var(--brand-soft) 28%, var(--card));
 }
 
-.os-input,
-.field {
+.os-input {
   background: var(--card);
   color: var(--text);
   border: 1px solid var(--border);
@@ -115,29 +113,17 @@ button:not(:disabled):active {
   padding: 0.65rem 0.8rem;
 }
 
-.field {
-  width: 100%;
-}
-.os-input:focus-visible,
-.field:focus-visible {
+.os-input:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
-.primary {
-  background: var(--brand);
-  color: white;
-  border-radius: 0.5rem;
-  padding: 0.65rem 1rem;
-  font-weight: 600;
-}
-.primary:hover {
-  background: var(--brand-dark);
-}
-html[data-theme="dark"] .primary {
-  color: var(--canvas);
-}
-.muted {
-  color: var(--muted);
+
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--border);
+  }
 }
 .page-enter {
   animation: page-enter 160ms ease-out both;

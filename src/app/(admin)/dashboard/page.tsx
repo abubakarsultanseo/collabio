@@ -1,5 +1,8 @@
 import { StatusBadge } from "@/components/status-badge";
 import Link from "next/link";
+import { EmptyState } from "@/components/app/empty-state";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   ArrowUpRight,
   CheckCircle2,
@@ -127,25 +130,25 @@ export default async function Dashboard() {
           label: "Active Partners",
           value: activePartnerCount ?? 0,
           icon: Users,
-          color: "text-slate-700",
+          color: "text-[var(--brand-dark)]",
         },
         {
           label: "Total Requests",
           value: all.length,
           icon: Inbox,
-          color: "text-slate-700",
+          color: "text-[var(--brand-dark)]",
         },
         {
           label: "Live Placements",
           value: live,
           icon: CheckCircle2,
-          color: "text-emerald-700",
+          color: "text-[var(--green)]",
         },
         {
           label: "Overdue Requests",
           value: overdue,
           icon: Clock3,
-          color: "text-red-600",
+          color: "text-[var(--red)]",
         },
       ]
     : [
@@ -153,247 +156,270 @@ export default async function Dashboard() {
           label: "Requests Received",
           value: all.filter((row) => row.receiver_id === user.id).length,
           icon: Inbox,
-          color: "text-slate-700",
+          color: "text-[var(--brand-dark)]",
         },
         {
           label: "Requests Sent",
           value: all.filter((row) => row.sender_id === user.id).length,
           icon: Send,
-          color: "text-slate-700",
+          color: "text-[var(--brand-dark)]",
         },
         {
           label: "Live Placements",
           value: live,
           icon: CheckCircle2,
-          color: "text-emerald-700",
+          color: "text-[var(--green)]",
         },
         {
           label: "Pending & Overdue",
           value: overdue,
           icon: Clock3,
-          color: "text-red-600",
+          color: "text-[var(--red)]",
         },
       ];
+  const quickActions = [
+    {
+      label: "Send a request",
+      href: "/partnerships",
+      icon: Send,
+      detail: "Choose a workspace and submit placement details.",
+    },
+    {
+      label: "Review received requests",
+      href: "/requests/inbox",
+      icon: Inbox,
+      detail: "Review a request, change its status, or reply.",
+    },
+    {
+      label: "Track sent requests",
+      href: "/requests/sent",
+      icon: Clock3,
+      detail: "Check statuses, discussions, and deadlines.",
+    },
+  ];
+
   return (
-    <main className="mx-auto max-w-[1440px] space-y-6 p-5 md:p-8 lg:p-10">
+    <div className="page-enter mx-auto max-w-[1440px] space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[.16em] text-blue-700">
-            {adminView
-              ? "Company-wide admin workspace"
-              : "Private partner workspace"}
-          </p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
+          <h1 className="text-2xl font-bold">
             {adminView
               ? "Admin Dashboard"
               : "Welcome back, " + (profile?.full_name ?? user.email)}
           </h1>
-          <p className="muted mt-2">
+          <p className="mt-1 text-sm text-[var(--muted)]">
             {adminView
               ? "See what needs attention and manage partner requests."
               : "See incoming requests, track work, and contact your partners."}
           </p>
         </div>
-        <Link
-          href="/partnerships"
-          className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
-        >
-          Send a request <ArrowUpRight size={16} />
+        <Link href="/partnerships" className={buttonVariants()}>
+          Send a request <ArrowUpRight size={16} aria-hidden />
         </Link>
       </header>
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {statCards.map(({ label, value, icon: Icon, color }) => (
-          <article key={label} className="panel p-5">
-            <Icon className={color} size={18} />
-            <p className="mt-4 text-3xl font-bold text-slate-900">{value}</p>
-            <p className="muted mt-1 text-sm">{label}</p>
-          </article>
+
+      <section
+        aria-label="Workspace metrics"
+        className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+      >
+        {statCards.map(({ label, value, icon: Icon, color }) => {
+          const problem = color === "text-[var(--red)]" && value > 0;
+          const contents = (
+            <>
+              <Icon className={color} size={19} aria-hidden />
+              <p className="mt-4 text-3xl font-bold">{value}</p>
+              <p className="mt-1 text-sm text-[var(--muted)]">{label}</p>
+            </>
+          );
+          return problem ? (
+            <Link
+              key={label}
+              href="/pending-overdue"
+              className="rounded-2xl border border-[var(--red)] bg-[var(--danger-bg)] p-5 shadow-sm motion-safe:transition-transform motion-safe:hover:-translate-y-0.5"
+            >
+              {contents}
+            </Link>
+          ) : (
+            <article key={label} className="os-card p-5">
+              {contents}
+            </article>
+          );
+        })}
+      </section>
+
+      <section aria-label="Quick actions" className="grid gap-3 md:grid-cols-3">
+        {quickActions.map(({ label, href, detail, icon: Icon }) => (
+          <Link
+            key={label}
+            href={href}
+            className="os-card os-card-interactive flex min-w-0 flex-col gap-2 p-5"
+          >
+            <span className="flex items-center justify-between text-[var(--brand-dark)]">
+              <Icon size={19} aria-hidden />
+              <ArrowUpRight size={16} aria-hidden />
+            </span>
+            <span className="mt-1 font-semibold">{label}</span>
+            <span className="text-sm text-[var(--muted)]">{detail}</span>
+          </Link>
         ))}
       </section>
-      <section aria-label="Quick actions" className="grid gap-3 md:grid-cols-3">
-        <Link
-          href="/partnerships"
-          className="group rounded-2xl border border-blue-200 bg-blue-50/70 p-5 transition hover:border-blue-300 hover:bg-blue-50"
-        >
-          <span className="flex items-center justify-between">
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-white text-blue-700">
-              <Send size={18} />
-            </span>
-            <ArrowUpRight
-              size={17}
-              className="text-blue-700 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
-            />
-          </span>
-          <span className="mt-4 block font-semibold text-slate-900">
-            Send a request
-          </span>
-          <span className="mt-1 block text-sm text-slate-600">
-            Choose a partner workspace and submit placement details.
-          </span>
-        </Link>
-        <Link
-          href="/requests/inbox"
-          className="group rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-slate-300 hover:bg-slate-50"
-        >
-          <span className="flex items-center justify-between">
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100 text-slate-700">
-              <Inbox size={18} />
-            </span>
-            <ArrowUpRight
-              size={17}
-              className="text-slate-500 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
-            />
-          </span>
-          <span className="mt-4 block font-semibold text-slate-900">
-            Review received requests
-          </span>
-          <span className="mt-1 block text-sm text-slate-600">
-            Open a request, update its status, or reply with a message.
-          </span>
-        </Link>
-        <Link
-          href="/requests/sent"
-          className="group rounded-2xl border border-slate-200 bg-white p-5 transition hover:border-slate-300 hover:bg-slate-50"
-        >
-          <span className="flex items-center justify-between">
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100 text-slate-700">
-              <Clock3 size={18} />
-            </span>
-            <ArrowUpRight
-              size={17}
-              className="text-slate-500 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
-            />
-          </span>
-          <span className="mt-4 block font-semibold text-slate-900">
-            Track sent requests
-          </span>
-          <span className="mt-1 block text-sm text-slate-600">
-            Check status, messages, and overdue deadlines.
-          </span>
-        </Link>
-      </section>
-      <section className="grid gap-5 xl:grid-cols-[1.5fr_1fr]">
-        <article className="panel overflow-hidden">
-          <div className="flex items-center justify-between border-b px-5 py-4">
-            <div>
-              <h2 className="font-semibold text-slate-900">Recent requests</h2>
-              <p className="muted mt-1 text-xs">Latest collaboration updates</p>
-            </div>
+
+      <section className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+        <article className="os-card min-w-0 overflow-hidden">
+          <header className="flex items-center justify-between gap-3 border-b border-[var(--border)] p-5">
+            <h2 className="font-semibold">Recent requests</h2>
             <Link
-              className="text-sm font-medium text-blue-700"
               href="/requests/inbox"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
             >
-              View inbox →
+              View inbox
             </Link>
-          </div>
+          </header>
           {recent.length === 0 ? (
-            <div className="p-8 text-center">
-              <p className="font-medium">No requests yet</p>
-              <p className="muted mt-1 text-sm">
-                Open a collaboration workspace to create the first request.
-              </p>
-              <Link
-                className="mt-3 inline-block text-sm font-semibold text-blue-700"
-                href="/partnerships"
-              >
-                Browse collaborations
-              </Link>
+            <div className="p-4">
+              <EmptyState
+                icon={Inbox}
+                title="No requests yet"
+                hint="Open a partner workspace to send the first request."
+              />
             </div>
           ) : (
-            <div className="divide-y">
-              {recent.map((row) => {
-                const sent = row.sender_id === user.id;
-                const peer = personMap[sent ? row.receiver_id : row.sender_id];
-                return (
-                  <Link
-                    key={row.id}
-                    href={sent ? "/requests/sent" : "/requests/inbox"}
-                    className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 hover:bg-slate-50"
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate font-medium text-slate-900">
-                        {row.anchor_text || "Collaboration request"}
-                      </span>
-                      <span className="muted mt-1 block text-xs">
-                        {sent ? "Sent to" : "From"}{" "}
-                        {peer?.full_name ?? "Partner"} ·{" "}
-                        {formatDate(row.created_at)}
-                      </span>
-                    </span>
-                    <StatusBadge status={row.status} />
-                  </Link>
-                );
-              })}
+            <div className="overflow-x-auto">
+              <table className="os-table w-full min-w-[460px] text-left text-sm">
+                <thead className="text-xs uppercase tracking-wide text-[var(--muted)]">
+                  <tr>
+                    {["Request", "Partner", "Status"].map((label) => (
+                      <th key={label} scope="col" className="px-4 py-3">
+                        {label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border)]">
+                  {recent.map((row) => {
+                    const sent = row.sender_id === user.id;
+                    const peer =
+                      personMap[sent ? row.receiver_id : row.sender_id];
+                    const anchor = row.anchor_text || "Collaboration request";
+                    return (
+                      <tr key={row.id}>
+                        <td className="px-4 py-3">
+                          <Link
+                            href={sent ? "/requests/sent" : "/requests/inbox"}
+                            title={anchor}
+                            className="block max-w-56 truncate font-semibold text-[var(--brand-dark)]"
+                          >
+                            {anchor}
+                          </Link>
+                          <time
+                            dateTime={row.created_at}
+                            className="whitespace-nowrap text-xs text-[var(--muted)]"
+                          >
+                            {formatDate(row.created_at)}
+                          </time>
+                        </td>
+                        <td className="px-4 py-3">
+                          {sent ? "To" : "From"} {peer?.full_name ?? "Partner"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <StatusBadge status={row.status} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </article>
-        <article className="panel p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="font-semibold">Today &amp; deadlines</h2>
-              <p className="muted mt-1 text-xs">Requests needing attention</p>
-            </div>
-            <Clock3 size={18} className="text-slate-500" />
-          </div>
-          <div className="mt-5 grid grid-cols-2 gap-3">
-            <div className="rounded-xl bg-slate-50 p-4">
-              <p className="text-2xl font-bold">{awaitingReview}</p>
-              <p className="muted mt-1 text-xs">Waiting to be seen</p>
-            </div>
-            <div className="rounded-xl bg-slate-50 p-4">
-              <p className="text-2xl font-bold">{receivedToday}</p>
-              <p className="muted mt-1 text-xs">Received today</p>
-            </div>
-            <div className="rounded-xl bg-slate-50 p-4">
-              <p className="text-2xl font-bold">{sentToday}</p>
-              <p className="muted mt-1 text-xs">Sent today</p>
-            </div>
-            <div className="rounded-xl bg-red-50 p-4">
-              <p className="text-2xl font-bold text-red-700">{overdue}</p>
-              <p className="mt-1 text-xs text-red-700">Overdue</p>
-            </div>
+
+        <article className="os-card p-5">
+          <h2 className="font-semibold">Today &amp; deadlines</h2>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            {[
+              {
+                label: "Waiting to be seen",
+                count: awaitingReview,
+                href: "/requests/inbox",
+                tone: "border-[var(--amber)] bg-[var(--warning-bg)] text-[var(--amber)]",
+              },
+              { label: "Received today", count: receivedToday },
+              { label: "Sent today", count: sentToday },
+              {
+                label: "Overdue",
+                count: overdue,
+                href: "/pending-overdue",
+                tone: "border-[var(--red)] bg-[var(--danger-bg)] text-[var(--red)]",
+              },
+            ].map(({ label, count, href, tone }) => {
+              const content = (
+                <>
+                  <p className="text-2xl font-bold">{count}</p>
+                  <p className="mt-1 text-xs">{label}</p>
+                </>
+              );
+              return href && count > 0 ? (
+                <Link
+                  key={label}
+                  href={href}
+                  className={cn(
+                    "rounded-xl border p-4 motion-safe:transition-transform motion-safe:hover:-translate-y-0.5",
+                    tone,
+                  )}
+                >
+                  {content}
+                </Link>
+              ) : (
+                <div key={label} className="rounded-xl bg-[var(--canvas)] p-4">
+                  {content}
+                </div>
+              );
+            })}
           </div>
           <Link
             href="/pending-overdue"
-            className="mt-4 block text-sm font-semibold text-blue-700"
+            className="mt-4 inline-block text-sm font-semibold text-[var(--brand-dark)]"
           >
             Review pending &amp; overdue →
           </Link>
         </article>
       </section>
-      <section className="panel">
-        <div className="flex items-center justify-between border-b px-5 py-4">
-          <div>
-            <h2 className="font-semibold">Partner workspaces</h2>
-            <p className="muted mt-1 text-xs">
-              Requests received and sent by workspace
-            </p>
-          </div>
+
+      <section className="space-y-3">
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-semibold">Partner workspaces</h2>
           <Link
             href="/partnerships"
-            className="text-sm font-medium text-blue-700"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
           >
-            All collaborations →
+            All workspaces
           </Link>
-        </div>
+        </header>
         {partnerStats.length === 0 ? (
-          <p className="muted p-5 text-sm">
-            No active collaboration workspaces yet. Accepting a partner
-            invitation will create one.
-          </p>
+          <EmptyState
+            icon={Users}
+            title="No active partner workspaces"
+            hint="Accepting a partner invitation will create a workspace."
+          />
         ) : (
-          <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {partnerStats.map((partner) => (
               <Link
                 key={partner.id}
                 href={`/partnerships/${partner.id}`}
-                className="rounded-xl border border-slate-200 p-4 transition hover:border-slate-300 hover:bg-slate-50"
+                className="os-card os-card-interactive min-w-0 p-4"
               >
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold">{partner.name}</h3>
-                  <ArrowUpRight size={15} className="text-slate-400" />
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="truncate font-semibold" title={partner.name}>
+                    {partner.name}
+                  </h3>
+                  <ArrowUpRight
+                    size={15}
+                    className="shrink-0 text-[var(--muted)]"
+                    aria-hidden
+                  />
                 </div>
-                <p className="muted mt-2 text-sm">
+                <p className="mt-2 text-sm text-[var(--muted)]">
                   {partner.inbound} received · {partner.outbound} sent
                 </p>
               </Link>
@@ -401,6 +427,6 @@ export default async function Dashboard() {
           </div>
         )}
       </section>
-    </main>
+    </div>
   );
 }

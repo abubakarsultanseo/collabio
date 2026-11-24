@@ -1,6 +1,89 @@
 "use client";
-import {useState} from "react"; import {createClient} from "@/lib/supabase/client";
-export default function LoginPage(){const [email,setEmail]=useState("");const [password,setPassword]=useState("");const [error,setError]=useState("");const [busy,setBusy]=useState(false);
-async function submit(e:React.FormEvent){e.preventDefault();setBusy(true);setError("");const supabase=createClient();const {error}=await supabase.auth.signInWithPassword({email,password});if(error){setError(error.message);setBusy(false);return;}window.location.href="/dashboard";}
-async function google(){setError("");const supabase=createClient();const {error}=await supabase.auth.signInWithOAuth({provider:"google",options:{redirectTo:`${window.location.origin}/auth/callback`}});if(error)setError(error.message);}
-return <main className="min-h-screen grid place-items-center p-5"><form onSubmit={submit} className="panel w-full max-w-md p-8"><p className="text-sm font-bold text-blue-700">COLLABIO</p><h1 className="text-2xl font-bold mt-2">Sign in</h1><p className="muted mt-2 mb-6">Use your invited account to continue.</p><label className="text-sm font-medium">Email</label><input className="field mt-1 mb-4" type="email" required value={email} onChange={e=>setEmail(e.target.value)}/><label className="text-sm font-medium">Password</label><input className="field mt-1 mb-4" type="password" required value={password} onChange={e=>setPassword(e.target.value)}/>{error&&<p className="text-sm text-red-600 mb-3">{error}</p>}<button disabled={busy} className="primary w-full">{busy?"Signing in...":"Sign in"}</button><div className="text-center muted my-4 text-sm">or</div><button type="button" onClick={google} className="w-full border rounded-lg p-3">Continue with Google</button><p className="text-xs muted mt-5">Accounts are created through administrator invitations. Public registration is disabled.</p></form></main>}
+
+import { useState, type FormEvent } from "react";
+import { AuthCard, AuthError } from "@/components/app/auth-card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { createClient } from "@/lib/supabase/client";
+
+export default function LoginPage() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (error) {
+      setError(error.message);
+      setBusy(false);
+      return;
+    }
+    window.location.href = "/dashboard";
+  }
+
+  async function google() {
+    setError("");
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+    if (error) setError(error.message);
+  }
+
+  return (
+    <AuthCard
+      title="Sign in"
+      description="Use your invited account to continue."
+    >
+      <form onSubmit={submit} className="space-y-4">
+        <div className="space-y-1">
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            type="email"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="password">Password</Label>
+          <Input
+            id="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+        </div>
+        {error && <AuthError>{error}</AuthError>}
+        <Button type="submit" disabled={busy} className="w-full">
+          {busy ? "Signing in…" : "Sign in"}
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={google}
+          className="w-full"
+        >
+          Continue with Google
+        </Button>
+      </form>
+      <p className="mt-5 text-xs text-[var(--muted)]">
+        An administrator must invite you before you can create an account.
+      </p>
+    </AuthCard>
+  );
+}

@@ -1,4 +1,10 @@
 "use client";
+import { EmptyState } from "@/components/app/empty-state";
+import { Users } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+
 import { useToast } from "@/components/app/toast";
 import Link from "next/link";
 import { useState } from "react";
@@ -66,23 +72,23 @@ export default function PartnershipsWorkspace({
   return (
     <div className="space-y-6">
       {isAdmin && (
-        <section className="panel p-5 md:p-6">
+        <section id="create-workspace" className="os-card p-5 md:p-6">
           <h2 className="text-lg font-semibold">Create a partner workspace</h2>
-          <p className="muted mt-1 text-sm">
+          <p className="text-[var(--muted)] mt-1 text-sm">
             Both members share requests, comments, and activity here.
           </p>
           <form onSubmit={submit} className="mt-4 grid gap-3 md:grid-cols-3">
-            <input
-              className="field"
+            <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
+              aria-label="Workspace name"
               placeholder="Workspace name"
               required
               minLength={2}
               maxLength={140}
             />
-            <select
-              className="field"
+            <Select
+              aria-label="Partner"
               value={peer}
               onChange={(e) => setPeer(e.target.value)}
               required
@@ -93,10 +99,10 @@ export default function PartnershipsWorkspace({
                   {p.full_name} — {p.email}
                 </option>
               ))}
-            </select>
-            <button className="primary" disabled={busy || !peer}>
+            </Select>
+            <Button disabled={busy || !peer}>
               {busy ? "Creating…" : "Create workspace"}
-            </button>
+            </Button>
           </form>
         </section>
       )}
@@ -105,25 +111,29 @@ export default function PartnershipsWorkspace({
           <h2 className="text-lg font-semibold">
             {isAdmin ? "Partner workspaces" : "Your workspace"}
           </h2>
-          <span className="muted text-sm">{rows.length} total</span>
+          <span className="text-[var(--muted)] text-sm">
+            {rows.length} total
+          </span>
         </div>
         {rows.length === 0 ? (
-          <div className="panel p-6 muted text-sm">
-            No partner workspaces yet. Accepting an invitation will create one.
-          </div>
+          <EmptyState
+            icon={Users}
+            title="No partner workspaces yet"
+            hint="Accepting a partner invitation will create a workspace."
+          />
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {rows.map((p) => (
               <Link
                 key={p.id}
                 href={`/partnerships/${p.id}`}
-                className="panel p-5 transition hover:-translate-y-0.5 hover:shadow-sm"
+                className="os-card os-card-interactive p-5"
               >
-                <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--brand-dark)]">
                   Shared collaboration workspace
                 </p>
                 <h3 className="mt-2 text-lg font-semibold">{p.name}</h3>
-                <p className="muted mt-2 text-sm">
+                <p className="text-[var(--muted)] mt-2 text-sm">
                   Send or review requests, update statuses, and view activity →
                 </p>
               </Link>

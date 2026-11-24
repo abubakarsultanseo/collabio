@@ -1,4 +1,10 @@
 "use client";
+import { buttonVariants } from "@/components/ui/button";
+import { EmptyState } from "@/components/app/empty-state";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+
 import { useToast } from "@/components/app/toast";
 import { StatusBadge } from "@/components/status-badge";
 import Link from "next/link";
@@ -105,52 +111,61 @@ export default function MessagesWorkspace() {
     }
   }
   return (
-    <main className="mx-auto max-w-7xl space-y-5 p-5 md:p-8 lg:p-10">
-      <header>
-        <p className="text-xs font-semibold uppercase tracking-[.16em] text-blue-700">
-          Workspace communication
-        </p>
-        <h1 className="mt-2 text-3xl font-bold">Messages</h1>
-        <p className="muted mt-2">
-          Each conversation stays connected to its collaboration request.
-        </p>
+    <div className="page-enter mx-auto max-w-7xl space-y-5">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Messages</h1>
+          <p className="text-[var(--muted)] mt-2 text-sm">
+            Each conversation stays connected to its collaboration request.
+          </p>
+        </div>
+        <Link href="/requests/inbox" className={buttonVariants()}>
+          Open inbox
+        </Link>
       </header>
-      <section className="panel grid min-h-[620px] overflow-hidden lg:grid-cols-[320px_1fr]">
-        <aside className="border-b border-slate-200 lg:border-b-0 lg:border-r">
+      <section className="os-card grid min-h-[620px] overflow-hidden lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
+        <aside className="border-b border-[var(--border)] lg:border-b-0 lg:border-r">
           <div className="border-b p-4">
             <h2 className="font-semibold">Request discussions</h2>
             <div className="relative mt-3">
               <Search
                 size={15}
-                className="absolute left-3 top-3 text-slate-400"
+                className="absolute left-3 top-3 text-[var(--muted)]"
               />
-              <input
-                className="field pl-9"
+              <Input
+                className="pl-9"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
+                aria-label="Find a request"
                 placeholder="Find a request"
               />
             </div>
           </div>
           <div className="max-h-[260px] overflow-y-auto lg:max-h-[560px]">
             {filtered.length === 0 ? (
-              <p className="muted p-5 text-sm">No requests found.</p>
+              <div className="p-3">
+                <EmptyState
+                  icon={MessageCircle}
+                  title="No requests found"
+                  hint="Try changing your search."
+                />
+              </div>
             ) : (
               filtered.map((row) => (
                 <button
                   type="button"
                   key={row.id}
                   onClick={() => setRequestId(row.id)}
-                  className={`block w-full border-b px-4 py-4 text-left transition ${requestId === row.id ? "bg-blue-50" : "hover:bg-slate-50"}`}
+                  className={`block w-full border-b px-4 py-4 text-left transition ${requestId === row.id ? "bg-[var(--info-bg)]" : "hover:bg-[var(--canvas)]"}`}
                 >
                   <span className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-semibold text-slate-900">
+                    <span className="truncate text-sm font-semibold text-[var(--text)]">
                       #{row.request_code} · {row.anchor_text}
                     </span>
                     {messages.some(
                       (message) => message.request_id === row.id,
                     ) && (
-                      <span className="h-2 w-2 shrink-0 rounded-full bg-blue-600" />
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--brand)]" />
                     )}
                   </span>
                   <span className="mt-1 block">
@@ -161,10 +176,10 @@ export default function MessagesWorkspace() {
             )}
           </div>
         </aside>
-        <div className="flex min-h-[620px] flex-col">
+        <div className="flex min-h-[620px] min-w-0 flex-col">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
                 Current discussion
               </p>
               <h2 className="mt-1 truncate font-semibold">
@@ -173,43 +188,24 @@ export default function MessagesWorkspace() {
                   : "Choose a request"}
               </h2>
             </div>
-            {active && (
-              <Link
-                href={`/requests/inbox`}
-                className="text-xs font-semibold text-blue-700"
-              >
-                Request inbox →
-              </Link>
-            )}
           </div>
           {!active ? (
-            <div className="grid flex-1 place-items-center p-8 text-center">
-              <div>
-                <MessageCircle className="mx-auto text-slate-300" size={28} />
-                <p className="mt-3 font-medium">No request selected</p>
-                <p className="muted mt-1 text-sm">
-                  Create or receive a request to start a discussion.
-                </p>
-              </div>
+            <div className="grid flex-1 place-items-center p-5">
+              <EmptyState
+                icon={MessageCircle}
+                title="No request selected"
+                hint="Create or receive a request to start a discussion."
+              />
             </div>
           ) : (
             <>
-              <div className="flex-1 space-y-4 overflow-y-auto bg-slate-50/60 p-4 md:p-6">
+              <div className="flex-1 space-y-4 overflow-y-auto bg-[var(--canvas)] p-4 md:p-6">
                 {thread.length === 0 ? (
-                  <div className="grid h-full min-h-48 place-items-center text-center">
-                    <div>
-                      <MessageCircle
-                        className="mx-auto text-slate-300"
-                        size={27}
-                      />
-                      <p className="mt-3 font-medium text-slate-700">
-                        No messages yet
-                      </p>
-                      <p className="muted mt-1 text-sm">
-                        Send the first update about this request.
-                      </p>
-                    </div>
-                  </div>
+                  <EmptyState
+                    icon={MessageCircle}
+                    title="No messages yet"
+                    hint="Send the first update about this request."
+                  />
                 ) : (
                   thread.map((message) => {
                     const mine = message.author_id === currentUserId;
@@ -219,10 +215,10 @@ export default function MessagesWorkspace() {
                         className={`flex ${mine ? "justify-end" : "justify-start"}`}
                       >
                         <div
-                          className={`max-w-[min(85%,680px)] rounded-2xl px-4 py-3 shadow-sm ${mine ? "rounded-br-md bg-blue-700 text-white" : "rounded-bl-md border border-slate-200 bg-white text-slate-800"}`}
+                          className={`max-w-[min(85%,680px)] rounded-2xl px-4 py-3 shadow-sm ${mine ? "rounded-br-md bg-[var(--brand)] text-white dark:text-[var(--canvas)]" : "rounded-bl-md border border-[var(--border)] bg-[var(--card)] text-[var(--text)]"}`}
                         >
                           <div
-                            className={`mb-1 flex flex-wrap items-center justify-between gap-x-4 text-[11px] ${mine ? "text-blue-100" : "text-slate-500"}`}
+                            className={`mb-1 flex flex-wrap items-center justify-between gap-x-4 text-[11px] ${mine ? "text-white dark:text-[var(--canvas)]" : "text-[var(--muted)]"}`}
                           >
                             <span className="font-semibold">
                               {mine
@@ -230,10 +226,13 @@ export default function MessagesWorkspace() {
                                 : (message.author?.full_name ?? "Partner")}
                             </span>
                             <time>
-                              {new Date(message.created_at).toLocaleString()}
+                              {new Date(message.created_at).toLocaleString(
+                                "en-PK",
+                                { timeZone: "Asia/Karachi" },
+                              )}
                             </time>
                           </div>
-                          <p className="whitespace-pre-wrap text-sm leading-6">
+                          <p className="whitespace-pre-wrap break-words text-sm leading-6">
                             {message.body}
                           </p>
                         </div>
@@ -242,14 +241,14 @@ export default function MessagesWorkspace() {
                   })
                 )}
               </div>
-              <form onSubmit={send} className="border-t bg-white p-4">
+              <form onSubmit={send} className="border-t bg-[var(--card)] p-4">
                 <label htmlFor="message-body" className="sr-only">
                   Write a message
                 </label>
                 <div className="flex items-end gap-2">
-                  <textarea
+                  <Textarea
                     id="message-body"
-                    className="field min-h-12 resize-y"
+                    className="min-h-12 resize-y"
                     rows={2}
                     maxLength={5000}
                     required
@@ -257,15 +256,15 @@ export default function MessagesWorkspace() {
                     onChange={(event) => setBody(event.target.value)}
                     placeholder="Write a message or placement update…"
                   />
-                  <button
+                  <Button
                     disabled={busy || !body.trim()}
-                    className="primary inline-flex shrink-0 items-center gap-2"
+                    className="inline-flex shrink-0 items-center gap-2"
                   >
                     <Send size={15} />
                     {busy ? "Sending…" : "Send"}
-                  </button>
+                  </Button>
                 </div>
-                <p className="muted mt-2 text-right text-[11px]">
+                <p className="text-[var(--muted)] mt-2 text-right text-[11px]">
                   Messages are saved in this request’s activity history.
                 </p>
               </form>
@@ -273,6 +272,6 @@ export default function MessagesWorkspace() {
           )}
         </div>
       </section>
-    </main>
+    </div>
   );
 }

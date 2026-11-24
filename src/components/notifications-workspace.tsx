@@ -1,4 +1,7 @@
 "use client";
+import { buttonVariants } from "@/components/ui/button";
+import { EmptyState } from "@/components/app/empty-state";
+import { Bell } from "lucide-react";
 import { useToast } from "@/components/app/toast";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -49,38 +52,48 @@ export default function NotificationsWorkspace() {
     );
   }
   return (
-    <main className="mx-auto max-w-5xl space-y-5 p-6 md:p-10">
-      <header>
-        <p className="text-xs font-semibold uppercase tracking-[.16em] text-blue-700">
-          Updates
-        </p>
-        <h1 className="mt-2 text-3xl font-bold">Notifications</h1>
-        <p className="muted mt-2">
-          New requests, status updates, and partner activity.
-        </p>
+    <div className="page-enter mx-auto max-w-5xl space-y-5">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Notifications</h1>
+          <p className="text-[var(--muted)] mt-2 text-sm">
+            New requests, status updates, and partner activity.
+          </p>
+        </div>
+        <Link href="/requests/inbox" className={buttonVariants()}>
+          View requests
+        </Link>
       </header>
-      <section className="panel divide-y">
+      <section className="os-card divide-y">
         {items.length === 0 ? (
-          <p className="muted p-8 text-sm">You’re all caught up.</p>
+          <EmptyState
+            icon={Bell}
+            title="You’re all caught up"
+            hint="New request and partner updates will appear here."
+          />
         ) : (
           items.map((item) => (
             <Link
               key={item.id}
               href={item.request_id ? "/requests/inbox" : "/team"}
               onClick={() => void mark(item)}
-              className={`block p-5 hover:bg-slate-50 ${item.read_at ? "" : "bg-blue-50/40"}`}
+              className={`block p-5 hover:bg-[var(--canvas)] ${item.read_at ? "" : "bg-[var(--info-bg)]"}`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="font-semibold">{item.title}</h2>
-                  <p className="muted mt-1 text-sm">{item.description}</p>
-                  <p className="muted mt-2 text-xs">
-                    {new Date(item.created_at).toLocaleString()}
+                  <p className="text-[var(--muted)] mt-1 text-sm">
+                    {item.description}
+                  </p>
+                  <p className="text-[var(--muted)] mt-2 text-xs">
+                    {new Date(item.created_at).toLocaleString("en-PK", {
+                      timeZone: "Asia/Karachi",
+                    })}
                   </p>
                 </div>
                 {!item.read_at && (
                   <span
-                    className="mt-1 h-2.5 w-2.5 rounded-full bg-blue-600"
+                    className="mt-1 h-2.5 w-2.5 rounded-full bg-[var(--brand)]"
                     aria-label="Unread"
                   />
                 )}
@@ -89,6 +102,6 @@ export default function NotificationsWorkspace() {
           ))
         )}
       </section>
-    </main>
+    </div>
   );
 }

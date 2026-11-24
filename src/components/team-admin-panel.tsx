@@ -1,5 +1,8 @@
 "use client";
+import { EmptyState } from "@/components/app/empty-state";
+import { Users, Mail } from "lucide-react";
 import { useToast } from "@/components/app/toast";
+import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { useCallback, useEffect, useState } from "react";
 
@@ -88,31 +91,37 @@ export default function TeamAdminPanel() {
   );
   return (
     <>
-      <section className="panel p-5 md:p-6">
+      <section className="os-card p-5 md:p-6">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
           <div>
             <h2 className="font-semibold">Team members</h2>
-            <p className="muted mt-1 text-sm">
+            <p className="text-[var(--muted)] mt-1 text-sm">
               Manage admin roles and account access.
             </p>
           </div>
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="sm"
             onClick={() => void load()}
             className="rounded-lg border px-3 py-2 text-sm"
           >
             Refresh
-          </button>
+          </Button>
         </div>
         {loading ? (
-          <p className="muted text-sm">Loading team…</p>
+          <p className="text-[var(--muted)] text-sm">Loading team…</p>
         ) : members.length === 0 ? (
-          <p className="muted text-sm">No team accounts found.</p>
+          <EmptyState
+            icon={Users}
+            title="No team accounts found"
+            hint="Invite a partner to add an account to your workspace."
+          />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-sm">
+            <table className="os-table w-full min-w-[720px] text-left text-sm">
               <thead>
-                <tr className="border-b text-slate-500">
+                <tr className="border-b text-[var(--muted)]">
                   <th className="py-3 pr-4">Member</th>
                   <th className="py-3 pr-4">Company</th>
                   <th className="py-3 pr-4">Role</th>
@@ -127,17 +136,19 @@ export default function TeamAdminPanel() {
                       <span className="block font-medium">
                         {member.full_name}
                       </span>
-                      <span className="muted text-xs">{member.email}</span>
+                      <span className="text-[var(--muted)] text-xs">
+                        {member.email}
+                      </span>
                     </td>
                     <td className="py-3 pr-4">{member.company || "—"}</td>
                     <td className="py-3 pr-4">
-                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs capitalize">
+                      <span className="rounded-full bg-[var(--canvas)] px-2.5 py-1 text-xs capitalize">
                         {member.role}
                       </span>
                     </td>
                     <td className="py-3 pr-4">
                       <span
-                        className={`rounded-full px-2.5 py-1 text-xs capitalize ${member.account_status === "active" ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}
+                        className={`rounded-full px-2.5 py-1 text-xs capitalize ${member.account_status === "active" ? "bg-[var(--success-bg)] text-[var(--green)]" : "bg-[var(--warning-bg)] text-[var(--amber)]"}`}
                       >
                         {member.account_status}
                       </span>
@@ -181,7 +192,7 @@ export default function TeamAdminPanel() {
                                 accountStatus: "active",
                               })
                             }
-                            className="rounded-lg border border-emerald-200 px-2.5 py-1.5 text-xs text-emerald-800 disabled:opacity-50"
+                            className="rounded-lg border border-[var(--green)] px-2.5 py-1.5 text-xs text-[var(--green)] disabled:opacity-50"
                           >
                             Activate
                           </button>
@@ -195,20 +206,24 @@ export default function TeamAdminPanel() {
           </div>
         )}
       </section>
-      <section className="panel mt-5 p-5 md:p-6">
+      <section className="os-card mt-5 p-5 md:p-6">
         <div className="mb-4">
           <h2 className="font-semibold">Pending invitations</h2>
-          <p className="muted mt-1 text-sm">
+          <p className="text-[var(--muted)] mt-1 text-sm">
             Invitations expire after 48 hours by default.
           </p>
         </div>
         {pending.length === 0 ? (
-          <p className="muted text-sm">No unexpired invitations are pending.</p>
+          <EmptyState
+            icon={Mail}
+            title="No pending invitations"
+            hint="Sent invitations appear here until they expire."
+          />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] text-left text-sm">
+            <table className="os-table w-full min-w-[560px] text-left text-sm">
               <thead>
-                <tr className="border-b text-slate-500">
+                <tr className="border-b text-[var(--muted)]">
                   <th className="py-3 pr-4">Invitee</th>
                   <th className="py-3 pr-4">Company</th>
                   <th className="py-3 pr-4">Sent</th>
@@ -222,14 +237,20 @@ export default function TeamAdminPanel() {
                       <span className="block font-medium">
                         {invite.full_name}
                       </span>
-                      <span className="muted text-xs">{invite.email}</span>
+                      <span className="text-[var(--muted)] text-xs">
+                        {invite.email}
+                      </span>
                     </td>
                     <td className="py-3 pr-4">{invite.company || "—"}</td>
                     <td className="py-3 pr-4">
-                      {new Date(invite.created_at).toLocaleDateString()}
+                      {new Date(invite.created_at).toLocaleDateString("en-PK", {
+                        timeZone: "Asia/Karachi",
+                      })}
                     </td>
                     <td className="py-3">
-                      {new Date(invite.expires_at).toLocaleString()}
+                      {new Date(invite.expires_at).toLocaleString("en-PK", {
+                        timeZone: "Asia/Karachi",
+                      })}
                     </td>
                   </tr>
                 ))}

@@ -2,9 +2,25 @@
 import { useToast } from "@/components/app/toast";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { StatusBadge, formatStatus } from "@/components/status-badge";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { FileSpreadsheet, Search, SlidersHorizontal } from "lucide-react";
+import {
+  FileSpreadsheet,
+  Inbox,
+  MessageSquare,
+  Pencil,
+  Search,
+  SlidersHorizontal,
+  Trash2,
+  X,
+} from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { EmptyState } from "@/components/app/empty-state";
+import { cn } from "@/lib/utils";
 
 type Row = {
   id: string;
@@ -51,12 +67,47 @@ type Filters = {
   createdFrom: string;
   createdTo: string;
 };
+const emptyFilters: Filters = {
+  type: "",
+  direction: "",
+  partnershipId: "",
+  createdFrom: "",
+  createdTo: "",
+};
+type Preset = {
+  name: string;
+  search: string;
+  status: string;
+  filters: Filters;
+};
+const types = ["guest_post", "link_insertion", "other"];
+
+function isPreset(value: unknown): value is Preset {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Partial<Preset>;
+  return (
+    typeof item.name === "string" &&
+    typeof item.search === "string" &&
+    typeof item.status === "string" &&
+    !!item.filters &&
+    Object.keys(emptyFilters).every(
+      (key) => typeof item.filters?.[key as keyof Filters] === "string",
+    )
+  );
+}
+
+function displayDate(value: string) {
+  return new Date(value).toLocaleString("en-PK", { timeZone: "Asia/Karachi" });
+}
+
 function EditRequestForm({
   row,
   onSave,
+  disabled,
 }: {
   row: Row;
   onSave: (value: Record<string, unknown>) => void;
+  disabled: boolean;
 }) {
   return (
     <form
@@ -72,69 +123,71 @@ function EditRequestForm({
           notes: String(data.get("notes") || ""),
         });
       }}
-      className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4 md:grid-cols-2"
+      className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-4 md:grid-cols-2"
     >
       <h3 className="font-semibold md:col-span-2">Edit request details</h3>
       <label className="text-xs">
         Placement page
-        <input
+        <Input
           name="placementPageUrl"
           defaultValue={row.placement_page_url}
-          className="field mt-1"
+          className="mt-1"
           type="url"
           required
         />
       </label>
       <label className="text-xs">
         Anchor text
-        <input
+        <Input
           name="anchorText"
           defaultValue={row.anchor_text}
-          className="field mt-1"
+          className="mt-1"
           required
         />
       </label>
       <label className="text-xs">
         Target link
-        <input
+        <Input
           name="targetLink"
           defaultValue={row.target_link}
-          className="field mt-1"
+          className="mt-1"
           type="url"
           required
         />
       </label>
       <label className="text-xs">
         Request type
-        <select
+        <Select
           name="requestType"
           defaultValue={row.request_type}
-          className="field mt-1"
+          className="mt-1"
         >
           <option value="guest_post">Guest post</option>
           <option value="link_insertion">Link insertion</option>
           <option value="other">Other</option>
-        </select>
+        </Select>
       </label>
       <label className="text-xs md:col-span-2">
         Instructions
-        <textarea
+        <Textarea
           name="instructions"
           defaultValue={row.instructions ?? ""}
-          className="field mt-1"
+          className="mt-1"
           rows={3}
         />
       </label>
       <label className="text-xs md:col-span-2">
         Notes
-        <textarea
+        <Textarea
           name="notes"
           defaultValue={row.notes ?? ""}
-          className="field mt-1"
+          className="mt-1"
           rows={3}
         />
       </label>
-      <button className="primary md:col-span-2">Save request changes</button>
+      <Button type="submit" disabled={disabled} className="md:col-span-2">
+        Save request changes
+      </Button>
     </form>
   );
 }
@@ -151,15 +204,50 @@ export default function RequestListWorkspace({
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
-  const [filters, setFilters] = useState<Filters>({
-    type: "",
-    direction: "",
-    partnershipId: "",
-    createdFrom: "",
-    createdTo: "",
-  });
+  const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [advanced, setAdvanced] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Row | null>(null);
+  const [pendingStatus, setPendingStatus] = useState<{
+    id: string;
+    status: string;
+  } | null>(null);
+  const [feedback, setFeedback] = useState<{ id: string; text: string } | null>(
+    null,
+  );
+  const [presets, setPresets] = useState<Preset[]>([]);
+  const [presetName, setPresetName] = useState("");
+  const [presetOpen, setPresetOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const latestLoad = useRef(0);
+  const mutation = useRef(false);
+  const presetKey = `collabio-request-filters:${scope}`;
+
+  useEffect(() => {
+    try {
+      const saved: unknown = JSON.parse(
+        localStorage.getItem(presetKey) ?? "[]",
+      );
+      setPresets(Array.isArray(saved) ? saved.filter(isPreset) : []);
+    } catch {
+      setPresets([]);
+    }
+  }, [presetKey]);
+
+  function savePresets(next: Preset[]) {
+    try {
+      localStorage.setItem(presetKey, JSON.stringify(next));
+      setPresets(next);
+    } catch {
+      notify("Could not save filters on this device.", "error");
+    }
+  }
+
+  function reset() {
+    setSearch("");
+    setStatus("");
+    setFilters(emptyFilters);
+  }
   useEffect(() => {
     fetch("/api/partnerships", { cache: "no-store" })
       .then((r) => r.json())
@@ -167,6 +255,7 @@ export default function RequestListWorkspace({
       .catch(() => {});
   }, []);
   const load = useCallback(async () => {
+    const loadId = ++latestLoad.current;
     try {
       const params = new URLSearchParams({ scope });
       if (search.trim()) params.set("q", search.trim());
@@ -183,12 +272,15 @@ export default function RequestListWorkspace({
       const data = await response.json();
       if (!response.ok)
         throw new Error(data.error ?? "Could not load requests.");
-      setRows(data.requests ?? []);
+      if (loadId === latestLoad.current) setRows(data.requests ?? []);
     } catch (caught) {
+      if (loadId !== latestLoad.current) return;
       notify(
         caught instanceof Error ? caught.message : "Could not load requests.",
         "error",
       );
+    } finally {
+      if (loadId === latestLoad.current) setLoading(false);
     }
   }, [scope, search, status, filters, notify]);
   useEffect(() => {
@@ -196,6 +288,13 @@ export default function RequestListWorkspace({
     return () => window.clearTimeout(timer);
   }, [load]);
   async function update(row: Row, body: Record<string, unknown>) {
+    if (mutation.current) return;
+    mutation.current = true;
+    const nextStatus = typeof body.status === "string" ? body.status : null;
+    if (nextStatus) {
+      setPendingStatus({ id: row.id, status: nextStatus });
+      setFeedback({ id: row.id, text: "Saving…" });
+    }
     setBusy(row.id);
     try {
       const response = await fetch("/api/requests", {
@@ -206,17 +305,31 @@ export default function RequestListWorkspace({
       const data = await response.json();
       if (!response.ok)
         throw new Error(data.error ?? "Could not update request.");
+      if (nextStatus) {
+        setRows((current) =>
+          current.map((item) =>
+            item.id === row.id ? { ...item, status: nextStatus } : item,
+          ),
+        );
+      }
       await load();
+      if (nextStatus) setFeedback({ id: row.id, text: "Saved ✓" });
+      else if (!body.markSeen) notify("Request updated.");
     } catch (caught) {
+      if (nextStatus) setFeedback({ id: row.id, text: "Save failed" });
       notify(
         caught instanceof Error ? caught.message : "Could not update request.",
         "error",
       );
     } finally {
+      setPendingStatus(null);
       setBusy(null);
+      mutation.current = false;
     }
   }
   async function remove(row: Row) {
+    if (mutation.current) return;
+    mutation.current = true;
     setBusy(row.id);
     try {
       const response = await fetch("/api/requests", {
@@ -237,6 +350,7 @@ export default function RequestListWorkspace({
       );
     } finally {
       setBusy(null);
+      mutation.current = false;
     }
   }
   const exportQuery = new URLSearchParams({ scope, format: "xlsx" });
@@ -248,47 +362,108 @@ export default function RequestListWorkspace({
     exportQuery.set("partnershipId", filters.partnershipId);
   if (filters.createdFrom) exportQuery.set("createdFrom", filters.createdFrom);
   if (filters.createdTo) exportQuery.set("createdTo", filters.createdTo);
+  const activeRow =
+    editing && (rows.find((row) => row.id === editing.id) ?? editing);
+  const rowAction = "h-auto rounded-md px-2 py-1";
+  const overdue = (row: Row) =>
+    row.was_overdue ||
+    row.status === "overdue" ||
+    (new Date(row.deadline_at) < new Date() && !row.first_viewed_at);
+
+  function openRequest(row: Row) {
+    setEditing(row);
+    if (scope === "inbox" && !row.first_viewed_at)
+      void update(row, { markSeen: true });
+  }
+
+  function statusControls(row: Row) {
+    const current =
+      pendingStatus?.id === row.id ? pendingStatus.status : row.status;
+    return (
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-1.5">
+          {["reviewing", "accepted", "hold"].map((value) => (
+            <Button
+              key={value}
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={busy !== null || value === current}
+              onClick={() => void update(row, { status: value })}
+              className={cn(
+                rowAction,
+                "capitalize",
+                value === "accepted"
+                  ? "bg-[var(--success-bg)] text-[var(--green)]"
+                  : value === "hold"
+                    ? "bg-[var(--warning-bg)] text-[var(--amber)]"
+                    : "bg-[var(--info-bg)] text-[var(--brand-dark)]",
+              )}
+            >
+              {formatStatus(value)}
+            </Button>
+          ))}
+        </div>
+        <Select
+          aria-label={`Status for request ${row.request_code}`}
+          className="h-8 min-w-36 text-xs capitalize"
+          value={current}
+          disabled={busy !== null}
+          onChange={(event) => void update(row, { status: event.target.value })}
+        >
+          {statuses.map((value) => (
+            <option key={value} value={value}>
+              {formatStatus(value)}
+            </option>
+          ))}
+        </Select>
+        <p role="status" className="min-h-4 text-xs text-[var(--muted)]">
+          {feedback?.id === row.id ? feedback.text : ""}
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <main className="mx-auto max-w-6xl space-y-5 p-5 md:p-8 lg:p-10">
-      <header className="flex flex-wrap items-end justify-between gap-4">
+    <div className="page-enter mx-auto max-w-7xl space-y-5">
+      <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[.16em] text-blue-700">
-            Collaboration requests
-          </p>
-          <h1 className="mt-2 text-3xl font-bold">{title}</h1>
-          <p className="muted mt-2">
+          <h1 className="text-2xl font-bold">{title}</h1>
+          <p className="mt-1 text-sm text-[var(--muted)]">
             Search, review, and update requests shared with your partners.
           </p>
         </div>
         <a
           href={`/api/export?${exportQuery}`}
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          className={buttonVariants({ variant: "secondary" })}
         >
-          <FileSpreadsheet size={17} /> Export Excel
+          <FileSpreadsheet size={17} aria-hidden /> Export Excel
         </a>
       </header>
 
-      <section className="panel space-y-4 p-4">
-        <div className="grid gap-3 md:grid-cols-[1fr_220px_auto] md:items-end">
+      <section className="os-card space-y-4 p-4" aria-label="Request filters">
+        <div className="grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(8rem,12rem)] xl:grid-cols-[minmax(0,1fr)_minmax(8rem,12rem)_auto]">
           <label className="text-sm font-medium">
             Search requests
-            <div className="relative mt-1">
+            <span className="relative mt-1 block">
               <Search
                 size={16}
-                className="absolute left-3 top-3 text-slate-400"
+                className="pointer-events-none absolute left-3 top-3 text-[var(--muted)]"
+                aria-hidden
               />
-              <input
-                className="field pl-9"
+              <Input
+                type="search"
+                className="pl-9"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Request #, anchor, URL, or notes"
               />
-            </div>
+            </span>
           </label>
           <label className="text-sm font-medium">
             Status
-            <select
-              className="field mt-1"
+            <Select
+              className="mt-1 capitalize"
               value={status}
               onChange={(event) => setStatus(event.target.value)}
             >
@@ -298,23 +473,40 @@ export default function RequestListWorkspace({
                   {formatStatus(item)}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
-          <button
-            type="button"
-            onClick={() => setAdvanced(!advanced)}
-            className={`inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium ${advanced ? "border-blue-200 bg-blue-50 text-blue-800" : "border-slate-200 text-slate-700"}`}
-          >
-            <SlidersHorizontal size={16} />{" "}
-            {advanced ? "Hide filters" : "Advanced filters"}
-          </button>
+          <div className="flex flex-wrap gap-2 sm:col-span-2 xl:col-span-1">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setAdvanced((value) => !value)}
+              aria-expanded={advanced}
+              aria-controls="advanced-request-filters"
+            >
+              <SlidersHorizontal size={16} aria-hidden />{" "}
+              {advanced ? "Hide filters" : "Advanced filters"}
+            </Button>
+            <Button type="button" variant="ghost" onClick={reset}>
+              Reset
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPresetOpen(true)}
+            >
+              Save filter
+            </Button>
+          </div>
         </div>
         {advanced && (
-          <div className="grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2 lg:grid-cols-5">
-            <label className="text-xs font-medium">
+          <div
+            id="advanced-request-filters"
+            className="grid gap-3 border-t border-[var(--border)] pt-4 sm:grid-cols-2 xl:grid-cols-5"
+          >
+            <label className="text-sm">
               Workspace
-              <select
-                className="field mt-1 py-2"
+              <Select
+                className="mt-1"
                 value={filters.partnershipId}
                 onChange={(event) =>
                   setFilters({ ...filters, partnershipId: event.target.value })
@@ -326,27 +518,29 @@ export default function RequestListWorkspace({
                     {item.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
-            <label className="text-xs font-medium">
+            <label className="text-sm">
               Request type
-              <select
-                className="field mt-1 py-2"
+              <Select
+                className="mt-1 capitalize"
                 value={filters.type}
                 onChange={(event) =>
                   setFilters({ ...filters, type: event.target.value })
                 }
               >
                 <option value="">All types</option>
-                <option value="guest_post">Guest post</option>
-                <option value="link_insertion">Link insertion</option>
-                <option value="other">Other</option>
-              </select>
+                {types.map((type) => (
+                  <option value={type} key={type}>
+                    {formatStatus(type)}
+                  </option>
+                ))}
+              </Select>
             </label>
-            <label className="text-xs font-medium">
+            <label className="text-sm">
               Direction
-              <select
-                className="field mt-1 py-2"
+              <Select
+                className="mt-1"
                 value={filters.direction}
                 onChange={(event) =>
                   setFilters({ ...filters, direction: event.target.value })
@@ -355,12 +549,12 @@ export default function RequestListWorkspace({
                 <option value="">Both directions</option>
                 <option value="sent">Sent by me</option>
                 <option value="received">Received by me</option>
-              </select>
+              </Select>
             </label>
-            <label className="text-xs font-medium">
+            <label className="text-sm">
               Created from
-              <input
-                className="field mt-1 py-2"
+              <Input
+                className="mt-1"
                 type="date"
                 value={filters.createdFrom}
                 onChange={(event) =>
@@ -368,10 +562,10 @@ export default function RequestListWorkspace({
                 }
               />
             </label>
-            <label className="text-xs font-medium">
+            <label className="text-sm">
               Created to
-              <input
-                className="field mt-1 py-2"
+              <Input
+                className="mt-1"
                 type="date"
                 value={filters.createdTo}
                 onChange={(event) =>
@@ -379,144 +573,261 @@ export default function RequestListWorkspace({
                 }
               />
             </label>
-            <button
-              type="button"
-              onClick={() => {
-                setSearch("");
-                setStatus("");
-                setFilters({
-                  type: "",
-                  direction: "",
-                  partnershipId: "",
-                  createdFrom: "",
-                  createdTo: "",
-                });
-              }}
-              className="justify-self-start text-sm font-semibold text-blue-700"
-            >
-              Clear filters
-            </button>
           </div>
         )}
-      </section>
-      {rows.length === 0 ? (
-        <section className="panel p-10 text-center">
-          <p className="font-medium">No requests match these filters.</p>
-          <p className="muted mt-1 text-sm">
-            Try another search, status, or date range.
-          </p>
-        </section>
-      ) : (
-        <section className="space-y-3">
-          <p className="muted text-xs">
-            Showing {rows.length} request{rows.length === 1 ? "" : "s"}
-          </p>
-          {rows.map((row) => {
-            const counterpart = scope === "sent" ? row.receiver : row.sender;
-            const overdue =
-              row.was_overdue ||
-              row.status === "overdue" ||
-              (new Date(row.deadline_at) < new Date() && !row.first_viewed_at);
-            return (
-              <details key={row.id} className="panel group">
-                <summary
-                  className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 p-4 md:p-5"
+        {presets.length > 0 && (
+          <ul className="flex flex-wrap gap-2" aria-label="Saved filters">
+            {presets.map((preset) => (
+              <li
+                key={preset.name}
+                className="flex items-center gap-1 rounded-full bg-[var(--brand-soft)] px-2 text-[var(--brand-dark)]"
+              >
+                <button
+                  type="button"
+                  className="rounded-full px-1 py-1 text-xs font-medium"
                   onClick={() => {
-                    if (scope === "inbox" && !row.first_viewed_at)
-                      void update(row, { markSeen: true });
+                    setSearch(preset.search);
+                    setStatus(preset.status);
+                    setFilters(preset.filters);
+                    setAdvanced(Object.values(preset.filters).some(Boolean));
                   }}
                 >
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold text-slate-900">
-                      #{row.request_code} · {row.anchor_text}{" "}
-                      <span className="muted font-normal">
-                        · {row.workspace?.name ?? "Workspace"}
-                      </span>
-                    </p>
-                    <p className="muted mt-1 text-xs">
-                      {scope === "sent" ? "To" : "From"}{" "}
-                      {counterpart?.full_name ?? "Partner"} ·{" "}
-                      {new Date(row.created_at).toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <StatusBadge status={overdue ? "overdue" : row.status} />
-                    <span className="muted text-xs">
-                      {row.request_type.replaceAll("_", " ")}
-                    </span>
-                  </div>
-                </summary>
-                <div className="space-y-4 border-t px-4 py-4 md:px-5">
-                  <div className="grid gap-4 text-sm md:grid-cols-2">
-                    <div>
-                      <p className="muted text-xs">Placement page</p>
-                      <a
-                        className="break-all text-blue-700"
-                        target="_blank"
-                        rel="noreferrer"
-                        href={row.placement_page_url}
-                      >
-                        {row.placement_page_url}
-                      </a>
-                    </div>
-                    <div>
-                      <p className="muted text-xs">Target link</p>
-                      <a
-                        className="break-all text-blue-700"
-                        target="_blank"
-                        rel="noreferrer"
-                        href={row.target_link}
-                      >
-                        {row.target_link}
-                      </a>
-                    </div>
-                    <div>
-                      <p className="muted text-xs">Review deadline</p>
-                      <p>{new Date(row.deadline_at).toLocaleString()}</p>
-                    </div>
-                    <label className="text-xs font-medium">
-                      Update status
-                      <select
-                        disabled={busy === row.id}
-                        className="field mt-1 py-2"
-                        value={row.status}
-                        onChange={(event) =>
-                          void update(row, { status: event.target.value })
-                        }
-                      >
-                        {statuses.map((item) => (
-                          <option key={item} value={item}>
-                            {formatStatus(item)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  <EditRequestForm
-                    row={row}
-                    onSave={(changes) => void update(row, changes)}
-                  />
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <Link
-                      href={`/messages?request=${row.id}`}
-                      className="text-sm font-semibold text-blue-700"
+                  {preset.name}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-full p-1"
+                  aria-label={`Remove saved filter ${preset.name}`}
+                  onClick={() =>
+                    savePresets(
+                      presets.filter((item) => item.name !== preset.name),
+                    )
+                  }
+                >
+                  <X size={13} aria-hidden />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {loading ? (
+        <p role="status" className="os-card p-5 text-sm text-[var(--muted)]">
+          Loading requests…
+        </p>
+      ) : rows.length === 0 ? (
+        <EmptyState
+          icon={Inbox}
+          title="No requests match these filters."
+          hint="Try another search, status, or date range."
+        />
+      ) : (
+        <section className="space-y-2" aria-label="Request results">
+          <p className="text-xs text-[var(--muted)]">
+            Showing {rows.length} request{rows.length === 1 ? "" : "s"}
+          </p>
+          <div
+            tabIndex={0}
+            role="region"
+            aria-label="Scrollable request table"
+            className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]"
+          >
+            <table className="os-table w-full min-w-[890px] text-left text-sm">
+              <thead className="text-xs uppercase tracking-wide text-[var(--muted)]">
+                <tr>
+                  {["Request", "Partner", "Type", "Status", "Actions"].map(
+                    (label) => (
+                      <th key={label} scope="col" className="px-4 py-3">
+                        {label}
+                      </th>
+                    ),
+                  )}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border)]">
+                {rows.map((row) => {
+                  const counterpart =
+                    (scope === "sent" ? row.receiver : row.sender)?.full_name ??
+                    "Partner";
+                  const current =
+                    pendingStatus?.id === row.id
+                      ? pendingStatus.status
+                      : row.status;
+                  return (
+                    <tr
+                      key={row.id}
+                      className={
+                        overdue(row) ? "bg-[var(--danger-bg)]" : undefined
+                      }
                     >
-                      Open this discussion →
-                    </Link>
-                    <button
-                      type="button"
-                      disabled={busy === row.id}
-                      onClick={() => setDeleteTarget(row)}
-                      className="rounded-lg border border-[var(--red)] px-3 py-2 text-sm text-[var(--red)]"
-                    >
-                      Delete request
-                    </button>
-                  </div>
-                </div>
-              </details>
-            );
-          })}
+                      <td className="px-4 py-3">
+                        <div
+                          className="max-w-60 truncate font-semibold"
+                          title={row.anchor_text}
+                        >
+                          #{row.request_code} · {row.anchor_text}
+                        </div>
+                        <div
+                          className="max-w-60 truncate text-xs text-[var(--muted)]"
+                          title={row.workspace?.name}
+                        >
+                          {row.workspace?.name ?? "Workspace"}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="max-w-32 truncate" title={counterpart}>
+                          {counterpart}
+                        </div>
+                        <div className="whitespace-nowrap text-xs text-[var(--muted)]">
+                          {displayDate(row.created_at)}
+                        </div>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 capitalize">
+                        {formatStatus(row.request_type)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={current} />
+                        {overdue(row) && current !== "overdue" && (
+                          <span className="ml-1">
+                            <StatusBadge status="overdue" />
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-1.5 whitespace-nowrap">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className={rowAction}
+                            onClick={() => openRequest(row)}
+                            disabled={busy !== null}
+                          >
+                            <Pencil size={12} aria-hidden /> Edit
+                          </Button>
+                          <Link
+                            href={`/messages?request=${row.id}`}
+                            className={cn(
+                              buttonVariants({
+                                variant: "outline",
+                                size: "sm",
+                              }),
+                              rowAction,
+                            )}
+                          >
+                            <MessageSquare size={12} aria-hidden /> Open
+                            discussion
+                          </Link>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={busy !== null}
+                            className={cn(
+                              rowAction,
+                              "border-[var(--red)] text-[var(--red)]",
+                            )}
+                            onClick={() => setDeleteTarget(row)}
+                          >
+                            <Trash2 size={12} aria-hidden /> Delete
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </section>
+      )}
+
+      <Dialog
+        open={presetOpen}
+        onOpenChange={(open) => {
+          setPresetOpen(open);
+          if (!open) setPresetName("");
+        }}
+      >
+        <DialogContent
+          title="Save request filter"
+          description="Name this filter to reuse it on this device."
+        >
+          <form
+            className="space-y-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const name = presetName.trim();
+              if (!name) return;
+              savePresets([
+                ...presets.filter((item) => item.name !== name),
+                { name, search, status, filters },
+              ]);
+              setPresetName("");
+              setPresetOpen(false);
+            }}
+          >
+            <label className="block text-sm">
+              Filter name
+              <Input
+                className="mt-1"
+                maxLength={48}
+                required
+                value={presetName}
+                onChange={(event) => setPresetName(event.target.value)}
+              />
+            </label>
+            <Button type="submit">Save filter</Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {activeRow && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setEditing(null);
+          }}
+        >
+          <DialogContent
+            title={`Request #${activeRow.request_code}`}
+            description={activeRow.anchor_text}
+            className="max-w-2xl"
+            closeDisabled={busy === activeRow.id}
+          >
+            <div className="mb-4 grid gap-3 text-sm sm:grid-cols-2">
+              <a
+                href={activeRow.placement_page_url}
+                title={activeRow.placement_page_url}
+                target="_blank"
+                rel="noreferrer"
+                className="break-all text-[var(--brand-dark)]"
+              >
+                Placement page ↗
+              </a>
+              <a
+                href={activeRow.target_link}
+                title={activeRow.target_link}
+                target="_blank"
+                rel="noreferrer"
+                className="break-all text-[var(--brand-dark)]"
+              >
+                Target link ↗
+              </a>
+              <p className="text-[var(--muted)]">
+                Review deadline · {displayDate(activeRow.deadline_at)}
+              </p>
+              {statusControls(activeRow)}
+            </div>
+            <EditRequestForm
+              key={activeRow.id}
+              row={activeRow}
+              disabled={busy !== null}
+              onSave={(changes) => void update(activeRow, changes)}
+            />
+          </DialogContent>
+        </Dialog>
       )}
       {deleteTarget && (
         <ConfirmDialog
@@ -529,6 +840,6 @@ export default function RequestListWorkspace({
           onConfirm={() => void remove(deleteTarget)}
         />
       )}
-    </main>
+    </div>
   );
 }

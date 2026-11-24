@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { Suspense, type ReactNode } from "react";
-import NavigationProgress from "@/components/app/navigation-progress";
+import { type ReactNode } from "react";
 import { ToastProvider } from "@/components/app/toast";
 import "./globals.css";
 
@@ -26,9 +25,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
       </head>
       <body>
-        <Suspense fallback={null}>
-          <NavigationProgress />
-        </Suspense>
         <ToastProvider>{children}</ToastProvider>
       </body>
     </html>

@@ -1,7 +1,14 @@
 "use client";
+import { EmptyState } from "@/components/app/empty-state";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+
 import { useToast } from "@/components/app/toast";
 import { StatusBadge, formatStatus } from "@/components/status-badge";
 import Link from "next/link";
+import { buttonVariants } from "@/components/ui/button";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowUpRight,
@@ -171,56 +178,61 @@ export default function PartnershipDetail({
     await load();
   }
   return (
-    <main className="mx-auto max-w-6xl space-y-6 p-5 md:p-8">
-      <Link href="/partnerships" className="text-sm font-medium text-blue-700">
+    <div className="page-enter mx-auto max-w-6xl space-y-6">
+      <Link
+        href="/partnerships"
+        className="text-sm font-medium text-[var(--brand-dark)]"
+      >
         ← Partner workspaces
       </Link>
-      <header>
-        <p className="text-xs font-semibold uppercase tracking-[.16em] text-blue-700">
-          Shared collaboration workspace
-        </p>
-        <h1 className="mt-2 text-3xl font-bold">{name}</h1>
-        <p className="muted mt-2">
-          Send requests to your partner, review incoming work, and keep the
-          conversation with each request.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">{name}</h1>
+          <p className="text-[var(--muted)] mt-2 text-sm">
+            Send requests to your partner, review incoming work, and keep the
+            conversation with each request.
+          </p>
+        </div>
+        <Link href="#create-request" className={buttonVariants()}>
+          Create request
+        </Link>
       </header>
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {metrics.map(({ label, value, icon: Icon }) => (
-          <article key={label} className="panel p-5">
-            <Icon className="text-slate-500" size={18} />
+          <article key={label} className="os-card p-5">
+            <Icon className="text-[var(--muted)]" size={18} />
             <p className="mt-3 text-3xl font-bold">{value}</p>
-            <p className="muted mt-1 text-sm">{label}</p>
+            <p className="text-[var(--muted)] mt-1 text-sm">{label}</p>
           </article>
         ))}
       </section>
-      <section className="panel p-5 md:p-6">
+      <section id="create-request" className="os-card p-5 md:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">Create request</h2>
-            <p className="muted mt-1 text-sm">
+            <p className="text-[var(--muted)] mt-1 text-sm">
               A request goes to the other person in this workspace, with a
               24-hour review deadline.
             </p>
           </div>
-          <div className="inline-flex rounded-lg bg-slate-100 p-1">
+          <div className="inline-flex rounded-lg bg-[var(--canvas)] p-1">
             <button
               type="button"
               onClick={() => setBulkMode(false)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium ${!bulkMode ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"}`}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium ${!bulkMode ? "bg-[var(--card)] text-[var(--text)] shadow-sm" : "text-[var(--muted)]"}`}
             >
               One request
             </button>
             <button
               type="button"
               onClick={() => setBulkMode(true)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium ${bulkMode ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"}`}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium ${bulkMode ? "bg-[var(--card)] text-[var(--text)] shadow-sm" : "text-[var(--muted)]"}`}
             >
               Bulk entry
             </button>
           </div>
         </div>
-        <div className="mt-4 rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-900">
+        <div className="mt-4 rounded-lg bg-[var(--info-bg)] px-3 py-2 text-sm text-[var(--brand-dark)]">
           Sender: {isAdmin ? "Admin" : "Partner"} · Receiver:{" "}
           {isAdmin ? "Partner" : "Admin"}
         </div>
@@ -241,10 +253,10 @@ export default function PartnershipDetail({
           <form onSubmit={submit} className="mt-4 grid gap-3 md:grid-cols-2">
             <label className="text-sm font-medium md:col-span-2">
               Placement page URL *
-              <input
+              <Input
                 type="url"
                 required
-                className="field mt-1"
+                className="mt-1"
                 placeholder="https://publisher.com/article"
                 value={form.placementPageUrl}
                 onChange={(event) =>
@@ -254,9 +266,9 @@ export default function PartnershipDetail({
             </label>
             <label className="text-sm font-medium">
               Anchor text *
-              <input
+              <Input
                 required
-                className="field mt-1"
+                className="mt-1"
                 placeholder="Exact anchor text"
                 value={form.anchorText}
                 onChange={(event) =>
@@ -266,10 +278,10 @@ export default function PartnershipDetail({
             </label>
             <label className="text-sm font-medium">
               Target link *
-              <input
+              <Input
                 required
                 type="url"
-                className="field mt-1"
+                className="mt-1"
                 placeholder="https://client.com/page"
                 value={form.targetLink}
                 onChange={(event) =>
@@ -279,8 +291,8 @@ export default function PartnershipDetail({
             </label>
             <label className="text-sm font-medium">
               Request type
-              <select
-                className="field mt-1"
+              <Select
+                className="mt-1"
                 value={form.requestType}
                 onChange={(event) =>
                   setForm({ ...form, requestType: event.target.value })
@@ -289,12 +301,12 @@ export default function PartnershipDetail({
                 <option value="guest_post">Guest post</option>
                 <option value="link_insertion">Link insertion</option>
                 <option value="other">Other</option>
-              </select>
+              </Select>
             </label>
             <label className="text-sm font-medium">
               Edit / Guest Post Instructions
-              <textarea
-                className="field mt-1"
+              <Textarea
+                className="mt-1"
                 rows={3}
                 maxLength={5000}
                 value={form.instructions}
@@ -305,8 +317,8 @@ export default function PartnershipDetail({
             </label>
             <label className="text-sm font-medium md:col-span-2">
               Notes / reason
-              <textarea
-                className="field mt-1"
+              <Textarea
+                className="mt-1"
                 rows={3}
                 maxLength={5000}
                 value={form.notes}
@@ -315,9 +327,9 @@ export default function PartnershipDetail({
                 }
               />
             </label>
-            <button disabled={busy} className="primary md:col-span-2">
+            <Button disabled={busy} className="md:col-span-2">
               {busy ? "Sending…" : "Send request"}
-            </button>
+            </Button>
           </form>
         )}
       </section>
@@ -325,13 +337,13 @@ export default function PartnershipDetail({
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">Workspace requests</h2>
-            <p className="muted mt-1 text-sm">
+            <p className="text-[var(--muted)] mt-1 text-sm">
               See both directions and update request progress.
             </p>
           </div>
           <Link
             href={`/messages?request=${shown[0]?.id ?? ""}`}
-            className="text-sm font-semibold text-blue-700"
+            className="text-sm font-semibold text-[var(--brand-dark)]"
           >
             Open messages →
           </Link>
@@ -347,34 +359,39 @@ export default function PartnershipDetail({
             <button
               key={key}
               onClick={() => setFilter(key)}
-              className={`shrink-0 rounded-full border px-3 py-1.5 text-sm ${filter === key ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"}`}
+              className={`shrink-0 rounded-full border px-3 py-1.5 text-sm ${filter === key ? "border-[var(--brand)] bg-[var(--brand)] text-white dark:text-[var(--canvas)]" : "border-[var(--border)] bg-[var(--card)] text-[var(--text)]"}`}
             >
               {label}
             </button>
           ))}
         </div>
         {shown.length === 0 ? (
-          <div className="panel p-6 text-sm text-slate-500">
-            No requests in this view yet.
-          </div>
+          <EmptyState
+            icon={Inbox}
+            title="No requests in this view yet"
+            hint="Choose a different filter or send a request."
+          />
         ) : (
           <div className="space-y-3">
             {shown.map((row) => (
               <article
                 key={row.id}
                 onClick={() => void markSeen(row)}
-                className="panel p-4 md:p-5"
+                className="os-card p-4 md:p-5"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h3 className="font-semibold">
                       #{row.request_code} · {row.anchor_text}
                     </h3>
-                    <p className="muted mt-1 text-xs">
+                    <p className="text-[var(--muted)] mt-1 text-xs">
                       {row.sender_id === currentUserId
                         ? "Sent by you"
                         : "Received from workspace member"}{" "}
-                      · {new Date(row.created_at).toLocaleString()}
+                      ·{" "}
+                      {new Date(row.created_at).toLocaleString("en-PK", {
+                        timeZone: "Asia/Karachi",
+                      })}
                     </p>
                   </div>
                   <StatusBadge
@@ -387,7 +404,7 @@ export default function PartnershipDetail({
                     href={row.placement_page_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="truncate text-blue-700"
+                    className="truncate text-[var(--brand-dark)]"
                   >
                     Placement: {row.placement_page_url}
                   </a>
@@ -396,20 +413,23 @@ export default function PartnershipDetail({
                     href={row.target_link}
                     target="_blank"
                     rel="noreferrer"
-                    className="truncate text-blue-700"
+                    className="truncate text-[var(--brand-dark)]"
                   >
                     Target: {row.target_link}
                   </a>
                 </div>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t pt-3">
-                  <span className="muted text-xs">
-                    Review by {new Date(row.deadline_at).toLocaleString()}
+                  <span className="text-[var(--muted)] text-xs">
+                    Review by{" "}
+                    {new Date(row.deadline_at).toLocaleString("en-PK", {
+                      timeZone: "Asia/Karachi",
+                    })}
                   </span>
                   <div className="flex items-center gap-3">
                     <Link
                       onClick={(event) => event.stopPropagation()}
                       href={`/messages?request=${row.id}`}
-                      className="text-xs font-semibold text-blue-700"
+                      className="text-xs font-semibold text-[var(--brand-dark)]"
                     >
                       Discuss
                     </Link>
@@ -418,8 +438,8 @@ export default function PartnershipDetail({
                       onClick={(event) => event.stopPropagation()}
                     >
                       Status
-                      <select
-                        className="field min-w-36 py-2"
+                      <Select
+                        className="min-w-36 py-2"
                         value={row.status}
                         onChange={(event) =>
                           void setStatus(row, event.target.value)
@@ -430,7 +450,7 @@ export default function PartnershipDetail({
                             {formatStatus(status)}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </label>
                   </div>
                 </div>
@@ -439,6 +459,6 @@ export default function PartnershipDetail({
           </div>
         )}
       </section>
-    </main>
+    </div>
   );
 }

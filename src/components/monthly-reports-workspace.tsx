@@ -1,4 +1,8 @@
 "use client";
+import { EmptyState } from "@/components/app/empty-state";
+import { BarChart3 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+
 import { useToast } from "@/components/app/toast";
 import { StatusBadge } from "@/components/status-badge";
 import { useEffect, useState } from "react";
@@ -67,22 +71,19 @@ export default function MonthlyReportsWorkspace() {
       ]
     : [];
   return (
-    <main className="mx-auto max-w-6xl space-y-6 p-5 md:p-8 lg:p-10">
+    <div className="page-enter mx-auto max-w-6xl space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[.16em] text-blue-700">
-            Performance overview
-          </p>
-          <h1 className="mt-2 text-3xl font-bold">Monthly Reports</h1>
-          <p className="muted mt-2">
+          <h1 className="text-2xl font-bold">Monthly Reports</h1>
+          <p className="text-[var(--muted)] mt-2 text-sm">
             Review request activity for a month and compare your partner
             workspaces.
           </p>
         </div>
         <label className="text-sm font-medium">
           Report month
-          <input
-            className="field mt-1"
+          <Input
+            className="mt-1"
             type="month"
             value={month}
             onChange={(event) => setMonth(event.target.value)}
@@ -90,7 +91,7 @@ export default function MonthlyReportsWorkspace() {
         </label>
       </header>
       {loading ? (
-        <section className="panel p-8 text-center text-sm text-slate-500">
+        <section className="os-card p-8 text-center text-sm text-[var(--muted)]">
           Loading monthly report…
         </section>
       ) : (
@@ -98,30 +99,34 @@ export default function MonthlyReportsWorkspace() {
           <>
             <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {cards.map((card) => (
-                <article key={card.label} className="panel p-5">
-                  <p className="muted text-sm">{card.label}</p>
+                <article key={card.label} className="os-card p-5">
+                  <p className="text-[var(--muted)] text-sm">{card.label}</p>
                   <p className="mt-3 text-3xl font-bold">{card.value}</p>
                 </article>
               ))}
             </section>
             <section className="grid gap-5 lg:grid-cols-2">
-              <article className="panel overflow-hidden">
+              <article className="os-card overflow-hidden">
                 <div className="border-b p-5">
                   <h2 className="font-semibold">
                     Partner workspace performance
                   </h2>
-                  <p className="muted mt-1 text-sm">
+                  <p className="text-[var(--muted)] mt-1 text-sm">
                     Request volume and outcomes for {month}.
                   </p>
                 </div>
                 {report.partners.length === 0 ? (
-                  <p className="muted p-5 text-sm">
-                    No requests were created this month.
-                  </p>
+                  <div className="p-3">
+                    <EmptyState
+                      icon={BarChart3}
+                      title="No requests this month"
+                      hint="Choose another month to review earlier activity."
+                    />
+                  </div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[620px] text-left text-sm">
-                      <thead className="bg-slate-50 text-xs text-slate-500">
+                    <table className="os-table w-full min-w-[620px] text-left text-sm">
+                      <thead className="bg-[var(--canvas)] text-xs text-[var(--muted)]">
                         <tr>
                           {[
                             "Workspace",
@@ -155,15 +160,19 @@ export default function MonthlyReportsWorkspace() {
                   </div>
                 )}
               </article>
-              <article className="panel p-5">
+              <article className="os-card p-5">
                 <h2 className="font-semibold">Request status breakdown</h2>
-                <p className="muted mt-1 text-sm">
+                <p className="text-[var(--muted)] mt-1 text-sm">
                   Current status of requests created during this month.
                 </p>
                 {report.statuses.length === 0 ? (
-                  <p className="muted mt-5 text-sm">
-                    No status activity to show.
-                  </p>
+                  <div className="p-3">
+                    <EmptyState
+                      icon={BarChart3}
+                      title="No status activity"
+                      hint="Status totals appear when the month has requests."
+                    />
+                  </div>
                 ) : (
                   <div className="mt-5 space-y-4">
                     {report.statuses.map((item) => (
@@ -172,9 +181,9 @@ export default function MonthlyReportsWorkspace() {
                           <StatusBadge status={item.status} />
                           <span className="font-semibold">{item.count}</span>
                         </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                        <div className="h-2 overflow-hidden rounded-full bg-[var(--canvas)]">
                           <div
-                            className="h-full rounded-full bg-blue-600"
+                            className="h-full rounded-full bg-[var(--brand)]"
                             style={{
                               width: `${Math.max(5, report.summary.total ? (item.count / report.summary.total) * 100 : 0)}%`,
                             }}
@@ -189,6 +198,6 @@ export default function MonthlyReportsWorkspace() {
           </>
         )
       )}
-    </main>
+    </div>
   );
 }

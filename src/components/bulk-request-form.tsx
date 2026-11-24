@@ -1,4 +1,9 @@
 "use client";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+
 import { useToast } from "@/components/app/toast";
 import { useState } from "react";
 type Item = {
@@ -61,7 +66,7 @@ export default function BulkRequestForm({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="font-semibold">Bulk request entry</h3>
-          <p className="muted mt-1 text-sm">
+          <p className="text-[var(--muted)] mt-1 text-sm">
             Add up to 50 requests for this partner in one submission.
           </p>
         </div>
@@ -69,7 +74,7 @@ export default function BulkRequestForm({
           type="button"
           disabled={items.length >= 50}
           onClick={() => setItems((current) => [...current, blank()])}
-          className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50"
+          className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--text)] disabled:opacity-50"
         >
           + Add request
         </button>
@@ -77,17 +82,17 @@ export default function BulkRequestForm({
       {items.map((item, index) => (
         <fieldset
           key={index}
-          className="grid gap-3 rounded-xl border border-slate-200 p-4 md:grid-cols-2"
+          className="grid gap-3 rounded-xl border border-[var(--border)] p-4 md:grid-cols-2"
         >
           <legend className="px-1 text-sm font-semibold">
             Request {index + 1}
           </legend>
           <label className="text-sm">
             Placement page URL *
-            <input
+            <Input
               required
               type="url"
-              className="field mt-1"
+              className="mt-1"
               value={item.placementPageUrl}
               onChange={(event) =>
                 change(index, "placementPageUrl", event.target.value)
@@ -97,9 +102,9 @@ export default function BulkRequestForm({
           </label>
           <label className="text-sm">
             Anchor text *
-            <input
+            <Input
               required
-              className="field mt-1"
+              className="mt-1"
               value={item.anchorText}
               onChange={(event) =>
                 change(index, "anchorText", event.target.value)
@@ -109,10 +114,10 @@ export default function BulkRequestForm({
           </label>
           <label className="text-sm">
             Target link *
-            <input
+            <Input
               required
               type="url"
-              className="field mt-1"
+              className="mt-1"
               value={item.targetLink}
               onChange={(event) =>
                 change(index, "targetLink", event.target.value)
@@ -122,8 +127,8 @@ export default function BulkRequestForm({
           </label>
           <label className="text-sm">
             Request type
-            <select
-              className="field mt-1"
+            <Select
+              className="mt-1"
               value={item.requestType}
               onChange={(event) =>
                 change(index, "requestType", event.target.value)
@@ -132,13 +137,13 @@ export default function BulkRequestForm({
               <option value="guest_post">Guest post</option>
               <option value="link_insertion">Link insertion</option>
               <option value="other">Other</option>
-            </select>
+            </Select>
           </label>
           <label className="text-sm md:col-span-2">
             Instructions
-            <textarea
+            <Textarea
               rows={2}
-              className="field mt-1"
+              className="mt-1"
               value={item.instructions}
               onChange={(event) =>
                 change(index, "instructions", event.target.value)
@@ -147,9 +152,9 @@ export default function BulkRequestForm({
           </label>
           <label className="text-sm md:col-span-2">
             Notes
-            <textarea
+            <Textarea
               rows={2}
-              className="field mt-1"
+              className="mt-1"
               value={item.notes}
               onChange={(event) => change(index, "notes", event.target.value)}
             />
@@ -160,16 +165,16 @@ export default function BulkRequestForm({
               onClick={() =>
                 setItems((current) => current.filter((_, i) => i !== index))
               }
-              className="justify-self-start text-sm font-medium text-red-700 md:col-span-2"
+              className="justify-self-start text-sm font-medium text-[var(--red)] md:col-span-2"
             >
               Remove this request
             </button>
           )}
         </fieldset>
       ))}
-      <button disabled={busy} className="primary">
+      <Button disabled={busy}>
         {busy ? "Submitting requests…" : `Send ${items.length} requests`}
-      </button>
+      </Button>
     </form>
   );
 }

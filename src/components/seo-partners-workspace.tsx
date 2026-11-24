@@ -1,4 +1,12 @@
 "use client";
+import { EmptyState } from "@/components/app/empty-state";
+import { Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useToast } from "@/components/app/toast";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -233,42 +241,37 @@ export default function SeoPartnersWorkspace({
   }
 
   return (
-    <main className="mx-auto max-w-6xl p-6 md:p-10">
+    <div className="page-enter mx-auto max-w-6xl">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-wide text-blue-800">
-            Outreach CRM
-          </p>
-          <h1 className="mt-2 text-3xl font-bold">SEO Partners</h1>
-          <p className="muted mt-2">
+          <h1 className="text-2xl font-bold">SEO Partners</h1>
+          <p className="text-[var(--muted)] mt-2 text-sm">
             Keep your outreach contacts, website metrics, and relationship
             status in one place.
           </p>
         </div>
-        <button onClick={openNew} className="primary">
-          + Add partner
-        </button>
+        <Button onClick={openNew}>+ Add partner</Button>
       </div>
 
-      <section className="panel mt-6 p-4 md:p-5">
+      <section className="os-card mt-6 p-4 md:p-5">
         <div
           className={`grid gap-3 ${isAdmin ? "md:grid-cols-3" : "md:grid-cols-2"}`}
         >
           <label className="text-sm font-medium">
             Search partners
-            <input
+            <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              className="field mt-1"
+              className="mt-1"
               placeholder="Name, website, email, niche…"
             />
           </label>
           <label className="text-sm font-medium">
             Status
-            <select
+            <Select
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value)}
-              className="field mt-1"
+              className="mt-1"
             >
               <option value="">All statuses</option>
               {statuses.map((value) => (
@@ -276,15 +279,15 @@ export default function SeoPartnersWorkspace({
                   {value[0].toUpperCase() + value.slice(1)}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           {isAdmin && (
             <label className="text-sm font-medium">
               Workspace
-              <select
+              <Select
                 value={ownerFilter}
                 onChange={(event) => setOwnerFilter(event.target.value)}
-                className="field mt-1"
+                className="mt-1"
               >
                 <option value="">All team members</option>
                 {activeMembers.map((member) => (
@@ -292,34 +295,36 @@ export default function SeoPartnersWorkspace({
                     {member.full_name} · {member.email}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           )}
         </div>
-        <div className="muted mt-3 text-xs">
+        <div className="text-[var(--muted)] mt-3 text-xs">
           {loading
             ? "Updating results…"
             : `${partners.length} ${partners.length === 1 ? "partner" : "partners"}`}
         </div>
       </section>
       {loading && partners.length === 0 ? (
-        <div className="panel muted mt-5 p-8 text-center text-sm">
+        <div className="os-card text-[var(--muted)] mt-5 p-8 text-center text-sm">
           Loading partners…
         </div>
       ) : partners.length === 0 ? (
-        <div className="panel mt-5 p-10 text-center">
-          <h2 className="font-semibold">No partners found</h2>
-          <p className="muted mt-2 text-sm">
-            Add a partner or adjust your search and filters.
-          </p>
-          <button onClick={openNew} className="primary mt-4">
-            Add your first partner
-          </button>
+        <div className="mt-5">
+          <EmptyState
+            icon={Users}
+            title="No partners found"
+            hint="Add a partner or adjust your search and filters."
+          >
+            <Button onClick={openNew} className="mt-4">
+              Add your first partner
+            </Button>
+          </EmptyState>
         </div>
       ) : (
         <div className="mt-5 grid gap-4 lg:grid-cols-2">
           {partners.map((partner) => (
-            <article key={partner.id} className="panel p-5">
+            <article key={partner.id} className="os-card p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h2 className="truncate text-lg font-semibold">
@@ -329,57 +334,69 @@ export default function SeoPartnersWorkspace({
                     href={partner.website_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="mt-1 block truncate text-sm text-blue-700"
+                    className="mt-1 block truncate text-sm text-[var(--brand-dark)]"
                   >
                     {partner.website_url}
                   </a>
                 </div>
                 <span
-                  className={`shrink-0 rounded-full px-2.5 py-1 text-xs capitalize ${partner.status === "active" ? "bg-emerald-50 text-emerald-800" : partner.status === "inactive" ? "bg-slate-100 text-slate-600" : partner.status === "contacted" ? "bg-blue-50 text-blue-800" : "bg-amber-50 text-amber-800"}`}
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-xs capitalize ${partner.status === "active" ? "bg-[var(--success-bg)] text-[var(--green)]" : partner.status === "inactive" ? "bg-[var(--canvas)] text-[var(--muted)]" : partner.status === "contacted" ? "bg-[var(--info-bg)] text-[var(--brand-dark)]" : "bg-[var(--warning-bg)] text-[var(--amber)]"}`}
                 >
                   {partner.status}
                 </span>
               </div>
               <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
                 <div>
-                  <span className="muted block text-xs">Domain Rating</span>
+                  <span className="text-[var(--muted)] block text-xs">
+                    Domain Rating
+                  </span>
                   <span className="font-medium">
                     {numberLabel(partner.domain_rating)}
                   </span>
                 </div>
                 <div>
-                  <span className="muted block text-xs">Organic traffic</span>
+                  <span className="text-[var(--muted)] block text-xs">
+                    Organic traffic
+                  </span>
                   <span className="font-medium">
                     {numberLabel(partner.organic_traffic, true)}
                   </span>
                 </div>
                 <div>
-                  <span className="muted block text-xs">Niche</span>
+                  <span className="text-[var(--muted)] block text-xs">
+                    Niche
+                  </span>
                   <span className="font-medium">{partner.niche || "—"}</span>
                 </div>
                 <div>
-                  <span className="muted block text-xs">Country</span>
+                  <span className="text-[var(--muted)] block text-xs">
+                    Country
+                  </span>
                   <span className="font-medium">{partner.country || "—"}</span>
                 </div>
                 <div>
-                  <span className="muted block text-xs">Contact</span>
+                  <span className="text-[var(--muted)] block text-xs">
+                    Contact
+                  </span>
                   <span className="font-medium">
                     {partner.contact_person || "—"}
                   </span>
                 </div>
                 <div>
-                  <span className="muted block text-xs">Email</span>
+                  <span className="text-[var(--muted)] block text-xs">
+                    Email
+                  </span>
                   <span className="break-all font-medium">
                     {partner.email || "—"}
                   </span>
                 </div>
               </div>
               {partner.notes && (
-                <p className="mt-4 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+                <p className="mt-4 whitespace-pre-wrap rounded-lg bg-[var(--canvas)] p-3 text-sm text-[var(--muted)]">
                   {partner.notes}
                 </p>
               )}
-              <div className="muted mt-4 flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs">
+              <div className="text-[var(--muted)] mt-4 flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs">
                 <span>
                   Added {dateLabel(partner.created_at)}
                   {isAdmin && partner.owner
@@ -389,13 +406,13 @@ export default function SeoPartnersWorkspace({
                 <span className="flex gap-2">
                   <button
                     onClick={() => openEdit(partner)}
-                    className="rounded-lg border px-3 py-1.5 text-sm text-slate-700"
+                    className="rounded-lg border px-3 py-1.5 text-sm text-[var(--text)]"
                   >
                     Edit
                   </button>
                   <button
                     onClick={() => setConfirmDelete(partner)}
-                    className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-700"
+                    className="rounded-lg border border-[var(--red)] px-3 py-1.5 text-sm text-[var(--red)]"
                   >
                     Delete
                   </button>
@@ -406,206 +423,176 @@ export default function SeoPartnersWorkspace({
         </div>
       )}
 
-      {modalOpen && (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-3"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setModalOpen(false);
-          }}
+      <Dialog
+        open={modalOpen}
+        onOpenChange={(open) => {
+          if (!saving) setModalOpen(open);
+        }}
+      >
+        <DialogContent
+          title={editing ? "Edit partner" : "Add SEO partner"}
+          description="Partner details stay inside the assigned workspace."
+          className="max-w-2xl"
+          closeDisabled={saving}
         >
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="partner-form-title"
-            className="max-h-[94vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl md:p-7"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 id="partner-form-title" className="text-xl font-bold">
-                  {editing ? "Edit partner" : "Add SEO partner"}
-                </h2>
-                <p className="muted mt-1 text-sm">
-                  Partner details stay inside the assigned workspace.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setModalOpen(false)}
-                aria-label="Close form"
-                className="rounded-lg px-2 py-1 text-xl text-slate-500"
+          <form onSubmit={save} className="mt-5 grid gap-3 md:grid-cols-2">
+            <label className="text-sm font-medium">
+              Partner name *
+              <Input
+                required
+                minLength={2}
+                maxLength={160}
+                value={form.name}
+                onChange={(event) => setValue("name", event.target.value)}
+                className="mt-1"
+                placeholder="Example Publishing"
+              />
+            </label>
+            <label className="text-sm font-medium">
+              Website URL *
+              <Input
+                required
+                type="url"
+                value={form.websiteUrl}
+                onChange={(event) => setValue("websiteUrl", event.target.value)}
+                className="mt-1"
+                placeholder="https://example.com"
+              />
+            </label>
+            <label className="text-sm font-medium">
+              Domain Rating (0–100)
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={form.domainRating}
+                onChange={(event) =>
+                  setValue("domainRating", event.target.value)
+                }
+                className="mt-1"
+                placeholder="e.g. 45"
+              />
+            </label>
+            <label className="text-sm font-medium">
+              Organic traffic
+              <Input
+                type="number"
+                min="0"
+                step="1"
+                value={form.organicTraffic}
+                onChange={(event) =>
+                  setValue("organicTraffic", event.target.value)
+                }
+                className="mt-1"
+                placeholder="Monthly estimate"
+              />
+            </label>
+            <label className="text-sm font-medium">
+              Email
+              <Input
+                type="email"
+                value={form.email}
+                onChange={(event) => setValue("email", event.target.value)}
+                className="mt-1"
+                placeholder="editor@example.com"
+              />
+            </label>
+            <label className="text-sm font-medium">
+              Contact person
+              <Input
+                maxLength={160}
+                value={form.contactPerson}
+                onChange={(event) =>
+                  setValue("contactPerson", event.target.value)
+                }
+                className="mt-1"
+                placeholder="Name"
+              />
+            </label>
+            <label className="text-sm font-medium">
+              Niche
+              <Input
+                maxLength={160}
+                value={form.niche}
+                onChange={(event) => setValue("niche", event.target.value)}
+                className="mt-1"
+                placeholder="Marketing, SaaS, HR…"
+              />
+            </label>
+            <label className="text-sm font-medium">
+              Country
+              <Input
+                maxLength={120}
+                value={form.country}
+                onChange={(event) => setValue("country", event.target.value)}
+                className="mt-1"
+                placeholder="Country"
+              />
+            </label>
+            <label className="text-sm font-medium">
+              Status
+              <Select
+                value={form.status}
+                onChange={(event) =>
+                  setValue("status", event.target.value as Partner["status"])
+                }
+                className="mt-1"
               >
-                ×
-              </button>
-            </div>
-            <form onSubmit={save} className="mt-5 grid gap-3 md:grid-cols-2">
+                {statuses.map((value) => (
+                  <option key={value} value={value}>
+                    {value[0].toUpperCase() + value.slice(1)}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            {isAdmin && !editing && (
               <label className="text-sm font-medium">
-                Partner name *
-                <input
-                  required
-                  minLength={2}
-                  maxLength={160}
-                  value={form.name}
-                  onChange={(event) => setValue("name", event.target.value)}
-                  className="field mt-1"
-                  placeholder="Example Publishing"
-                />
-              </label>
-              <label className="text-sm font-medium">
-                Website URL *
-                <input
-                  required
-                  type="url"
-                  value={form.websiteUrl}
-                  onChange={(event) =>
-                    setValue("websiteUrl", event.target.value)
-                  }
-                  className="field mt-1"
-                  placeholder="https://example.com"
-                />
-              </label>
-              <label className="text-sm font-medium">
-                Domain Rating (0–100)
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  value={form.domainRating}
-                  onChange={(event) =>
-                    setValue("domainRating", event.target.value)
-                  }
-                  className="field mt-1"
-                  placeholder="e.g. 45"
-                />
-              </label>
-              <label className="text-sm font-medium">
-                Organic traffic
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={form.organicTraffic}
-                  onChange={(event) =>
-                    setValue("organicTraffic", event.target.value)
-                  }
-                  className="field mt-1"
-                  placeholder="Monthly estimate"
-                />
-              </label>
-              <label className="text-sm font-medium">
-                Email
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={(event) => setValue("email", event.target.value)}
-                  className="field mt-1"
-                  placeholder="editor@example.com"
-                />
-              </label>
-              <label className="text-sm font-medium">
-                Contact person
-                <input
-                  maxLength={160}
-                  value={form.contactPerson}
-                  onChange={(event) =>
-                    setValue("contactPerson", event.target.value)
-                  }
-                  className="field mt-1"
-                  placeholder="Name"
-                />
-              </label>
-              <label className="text-sm font-medium">
-                Niche
-                <input
-                  maxLength={160}
-                  value={form.niche}
-                  onChange={(event) => setValue("niche", event.target.value)}
-                  className="field mt-1"
-                  placeholder="Marketing, SaaS, HR…"
-                />
-              </label>
-              <label className="text-sm font-medium">
-                Country
-                <input
-                  maxLength={120}
-                  value={form.country}
-                  onChange={(event) => setValue("country", event.target.value)}
-                  className="field mt-1"
-                  placeholder="Country"
-                />
-              </label>
-              <label className="text-sm font-medium">
-                Status
-                <select
-                  value={form.status}
-                  onChange={(event) =>
-                    setValue("status", event.target.value as Partner["status"])
-                  }
-                  className="field mt-1"
+                Workspace owner
+                <Select
+                  value={form.ownerId}
+                  onChange={(event) => setValue("ownerId", event.target.value)}
+                  className="mt-1"
                 >
-                  {statuses.map((value) => (
-                    <option key={value} value={value}>
-                      {value[0].toUpperCase() + value.slice(1)}
-                    </option>
-                  ))}
-                </select>
+                  <option value={currentUserId}>My workspace</option>
+                  {activeMembers
+                    .filter((member) => member.id !== currentUserId)
+                    .map((member) => (
+                      <option key={member.id} value={member.id}>
+                        {member.full_name}
+                      </option>
+                    ))}
+                </Select>
               </label>
-              {isAdmin && !editing && (
-                <label className="text-sm font-medium">
-                  Workspace owner
-                  <select
-                    value={form.ownerId}
-                    onChange={(event) =>
-                      setValue("ownerId", event.target.value)
-                    }
-                    className="field mt-1"
-                  >
-                    <option value={currentUserId}>My workspace</option>
-                    {activeMembers
-                      .filter((member) => member.id !== currentUserId)
-                      .map((member) => (
-                        <option key={member.id} value={member.id}>
-                          {member.full_name}
-                        </option>
-                      ))}
-                  </select>
-                </label>
-              )}
-              <label className="text-sm font-medium md:col-span-2">
-                Notes
-                <textarea
-                  maxLength={5000}
-                  rows={4}
-                  value={form.notes}
-                  onChange={(event) => setValue("notes", event.target.value)}
-                  className="field mt-1"
-                  placeholder="Outreach history, placement preferences, or other useful context"
-                />
-              </label>
+            )}
+            <label className="text-sm font-medium md:col-span-2">
+              Notes
+              <Textarea
+                maxLength={5000}
+                rows={4}
+                value={form.notes}
+                onChange={(event) => setValue("notes", event.target.value)}
+                className="mt-1"
+                placeholder="Outreach history, placement preferences, or other useful context"
+              />
+            </label>
 
-              <div className="flex justify-end gap-2 pt-2 md:col-span-2">
-                <button
-                  type="button"
-                  onClick={() => setModalOpen(false)}
-                  className="rounded-lg border px-4 py-2 text-sm"
-                >
-                  Cancel
-                </button>
-                <button
-                  disabled={saving}
-                  className="primary disabled:opacity-60"
-                >
-                  {saving
-                    ? "Saving…"
-                    : editing
-                      ? "Save changes"
-                      : "Add partner"}
-                </button>
-              </div>
-            </form>
-          </section>
-        </div>
-      )}
+            <div className="flex justify-end gap-2 pt-2 md:col-span-2">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={saving}
+                onClick={() => setModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button disabled={saving} className="disabled:opacity-60">
+                {saving ? "Saving…" : editing ? "Save changes" : "Add partner"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {confirmDelete && (
         <ConfirmDialog
@@ -618,6 +605,6 @@ export default function SeoPartnersWorkspace({
           onConfirm={() => void remove(confirmDelete)}
         />
       )}
-    </main>
+    </div>
   );
 }

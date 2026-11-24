@@ -1,14 +1,22 @@
-import {requireAdmin} from "@/server/auth";
-import InvitePartnerForm from "@/components/invite-partner-form";
+import { requireAdmin } from "@/server/auth";
+import { InvitePartnerDialog } from "@/components/app/invite-partner-dialog";
 import TeamAdminPanel from "@/components/team-admin-panel";
 
-export default async function TeamPage(){
+export default async function TeamPage() {
   await requireAdmin();
-  return <main className="mx-auto max-w-6xl p-6 md:p-10">
-    <a href="/dashboard" className="text-sm text-blue-700">← Dashboard</a>
-    <h1 className="mt-3 text-3xl font-bold">Team &amp; Invitations</h1>
-    <p className="muted mt-2">Invite teammates, review invitation status, and manage account access.</p>
-    <section className="panel mt-6 p-5 md:p-6"><h2 className="mb-4 font-semibold">Invite a team member</h2><InvitePartnerForm/></section>
-    <div className="mt-6"><TeamAdminPanel/></div>
-  </main>;
+
+  return (
+    <div className="page-enter mx-auto max-w-6xl space-y-5">
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Team &amp; Invitations</h1>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            Invite partners, review invitations, and manage access.
+          </p>
+        </div>
+        <InvitePartnerDialog />
+      </header>
+      <TeamAdminPanel />
+    </div>
+  );
 }

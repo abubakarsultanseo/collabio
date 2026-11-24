@@ -1,4 +1,6 @@
 "use client";
+import { EmptyState } from "@/components/app/empty-state";
+import { ShieldCheck, History } from "lucide-react";
 import { useToast } from "@/components/app/toast";
 import { useCallback, useEffect, useState } from "react";
 
@@ -119,20 +121,22 @@ export default function PermissionsManager() {
   return (
     <div className="space-y-4">
       {partners.length === 0 && !loadFailed ? (
-        <div className="panel muted p-6 text-sm">
-          No partner accounts found.
-        </div>
+        <EmptyState
+          icon={ShieldCheck}
+          title="No partner accounts found"
+          hint="Invite a partner before assigning permissions."
+        />
       ) : (
         partners.map((partner) => (
-          <section key={partner.id} className="panel p-5">
+          <section key={partner.id} className="os-card p-5">
             <header className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b pb-4">
               <div>
                 <h2 className="font-semibold">{partner.full_name}</h2>
-                <p className="muted mt-1 text-sm">
+                <p className="text-[var(--muted)] mt-1 text-sm">
                   {partner.email} · {partner.account_status}
                 </p>
               </div>
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs">
+              <span className="rounded-full bg-[var(--canvas)] px-2.5 py-1 text-xs">
                 Permissions apply immediately
               </span>
             </header>
@@ -140,12 +144,14 @@ export default function PermissionsManager() {
               {(Object.keys(permissionLabels) as PermissionKey[]).map((key) => (
                 <label
                   key={key}
-                  className="flex items-center justify-between gap-3 rounded-lg px-2 py-2 text-sm hover:bg-slate-50"
+                  className="flex items-center justify-between gap-3 rounded-lg px-2 py-2 text-sm hover:bg-[var(--canvas)]"
                 >
                   <span>
                     {permissionLabels[key]}
                     {key === "delete_requests" && (
-                      <span className="muted ml-1">(default off)</span>
+                      <span className="text-[var(--muted)] ml-1">
+                        (default off)
+                      </span>
                     )}
                   </span>
                   <input
@@ -157,7 +163,7 @@ export default function PermissionsManager() {
                     onChange={(event) =>
                       void change(partner, key, event.target.checked)
                     }
-                    className="h-4 w-4 accent-blue-700"
+                    className="h-4 w-4 accent-[var(--brand)]"
                   />
                 </label>
               ))}
@@ -165,17 +171,21 @@ export default function PermissionsManager() {
           </section>
         ))
       )}
-      <section className="panel overflow-hidden">
+      <section className="os-card overflow-hidden">
         <div className="border-b p-4">
           <h2 className="font-semibold">Permission change history</h2>
-          <p className="muted mt-1 text-xs">
+          <p className="text-[var(--muted)] mt-1 text-xs">
             Recent changes include the previous and new settings.
           </p>
         </div>
         {history.length === 0 ? (
-          <p className="muted p-4 text-sm">
-            No permission changes recorded yet.
-          </p>
+          <div className="p-3">
+            <EmptyState
+              icon={History}
+              title="No permission changes recorded"
+              hint="Changes will appear here after a permission is updated."
+            />
+          </div>
         ) : (
           <div className="divide-y">
             {history.map((item) => (
@@ -185,10 +195,15 @@ export default function PermissionsManager() {
               >
                 <span>
                   <b>{item.partner_name}</b>
-                  <span className="muted"> · Permissions updated</span>
+                  <span className="text-[var(--muted)]">
+                    {" "}
+                    · Permissions updated
+                  </span>
                 </span>
-                <time className="muted text-xs">
-                  {new Date(item.changed_at).toLocaleString()}
+                <time className="text-[var(--muted)] text-xs">
+                  {new Date(item.changed_at).toLocaleString("en-PK", {
+                    timeZone: "Asia/Karachi",
+                  })}
                 </time>
               </article>
             ))}
