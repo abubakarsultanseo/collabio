@@ -4,7 +4,7 @@ Collabio is an invite-only collaboration workspace for managing SEO outreach par
 
 ## Current build status
 
-This update completes the Phase 1 team setup layer on the supplied Collabio foundation: email/password and Google sign-in, protected workspaces, invitations and acceptance, pending-invite visibility, role management, and account activation/deactivation. It also includes the existing shared partnerships, link-exchange deals, request status tracking, quota history, and stale Shared indicators. Review [`docs/phase-1-to-3-review.md`](docs/phase-1-to-3-review.md) and [`docs/deal-system.md`](docs/deal-system.md) before deploying.
+This update includes Phase 1 team setup and Phase 2 SEO partner management: invitations, account roles and access, private partner directories, partner metrics, search, filters, and admin workspace review. It also includes the existing shared partnerships, link-exchange deals, request status tracking, quota history, and stale Shared indicators. Review [`docs/phase-1-to-3-review.md`](docs/phase-1-to-3-review.md) and [`docs/deal-system.md`](docs/deal-system.md) before deploying.
 
 ## Stack
 - Next.js App Router, React, TypeScript, Tailwind CSS
@@ -32,7 +32,7 @@ Never commit `.env.local`, API keys, or the Supabase service-role key. `.env.loc
 
 ## Database migrations
 
-Apply SQL migrations in numeric order in the Supabase SQL Editor. Do not rerun migration 0001 or 0002 if already applied. Apply 0003 only after confirming the earlier migrations and backing up the database. The new migration maps existing requests into per-member Legacy deals and stops safely if an old request cannot be mapped.
+Apply SQL migrations in numeric order in the Supabase SQL Editor. Do not rerun migrations 0001 or 0002 if already applied. Apply 0003 only after confirming the earlier migrations and backing up the database. Apply `0004_seo_partners.sql` once after migration 0003; it adds a separate partner directory table and row-level access rules without altering existing request, deal, or collaboration records.
 
 ## Local development
 
@@ -40,4 +40,4 @@ Install Node.js LTS, then run `npm install`, copy `.env.example` to `.env.local`
 
 ## Verification
 
-The code update should pass typecheck, lint, and production build before release. Live Supabase, Resend and OAuth behavior cannot be confirmed from the ZIP alone. Deploy to Vercel Preview first, then verify admin sign-in, a new invitation, invitation acceptance, partner sign-in, role changes, account deactivation, and protected access before production.
+The code update should pass typecheck, lint, and production build before release. Live Supabase, Resend and OAuth behavior cannot be confirmed from the ZIP alone. Deploy to Vercel Preview first, apply migration 0004, then verify partner CRUD, workspace privacy, admin review, sign-in, invitations, role changes, and account deactivation before production.
