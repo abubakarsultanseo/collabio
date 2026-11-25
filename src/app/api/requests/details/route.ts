@@ -123,7 +123,10 @@ export async function GET(request: Request) {
       })),
       history: history.map((change) => ({
         id: change.id,
-        author: names.get(change.actor_id) ?? "Former member",
+        author:
+          typeof change.new_value?.actor_name === "string"
+            ? change.new_value.actor_name
+            : (names.get(change.actor_id) ?? "Former member"),
         created_at: change.created_at,
         from: change.previous_value?.status ?? null,
         to: change.new_value?.status ?? null,

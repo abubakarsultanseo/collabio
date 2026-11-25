@@ -50,11 +50,14 @@ type Row = {
   first_viewed_at: string | null;
   deadline_at: string;
   was_overdue: boolean;
+  import_key?: string | null;
+  isReceiver?: boolean;
   created_at: string;
   sender: { full_name: string; email: string } | null;
   receiver: { full_name: string; email: string } | null;
   workspace: { name: string } | null;
 };
+type Cursor = { at: string; id: string };
 type Workspace = { id: string; name: string };
 const statuses = [
   "new_request",
@@ -204,9 +207,11 @@ function EditRequestForm({
 export default function RequestListWorkspace({
   scope,
   title,
+  initialRequestId,
 }: {
   scope: "inbox" | "sent" | "pending" | "overdue";
   title: string;
+  initialRequestId?: string;
 }) {
   const notify = useToast();
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
@@ -233,6 +238,8 @@ export default function RequestListWorkspace({
   const [presetName, setPresetName] = useState("");
   const [presetOpen, setPresetOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [paging, setPaging] = useState(false);
+  const [nextPage, setNextPage] = useState<Cursor | null>(null);
   const latestLoad = useRef(0);
   const mutation = useRef(false);
   const marking = useRef(new Set<string>());
@@ -266,47 +273,68 @@ export default function RequestListWorkspace({
     setFilters(emptyFilters);
   }
   useEffect(() => {
+    if (!advanced && !filters.partnershipId) return;
     fetch("/api/partnerships", { cache: "no-store" })
       .then((r) => r.json())
       .then((data) => setWorkspaces(data.partnerships ?? []))
       .catch(() => {});
-  }, []);
-  const load = useCallback(async () => {
-    const loadId = ++latestLoad.current;
-    recentEdits.current.clear();
-    try {
-      const params = new URLSearchParams({ scope });
-      if (search.trim()) params.set("q", search.trim());
-      if (status) params.set("status", status);
-      if (filters.type) params.set("type", filters.type);
-      if (filters.direction) params.set("direction", filters.direction);
-      if (filters.partnershipId)
-        params.set("partnershipId", filters.partnershipId);
-      if (filters.createdFrom) params.set("createdFrom", filters.createdFrom);
-      if (filters.createdTo) params.set("createdTo", filters.createdTo);
-      const response = await fetch(`/api/requests?${params}`, {
-        cache: "no-store",
-      });
-      const data = await response.json();
-      if (!response.ok)
-        throw new Error(data.error ?? "Could not load requests.");
-      if (loadId === latestLoad.current) {
-        const patched = ((data.requests ?? []) as Row[]).flatMap((row) => {
-          const edit = recentEdits.current.get(row.id);
-          return edit === null ? [] : [{ ...row, ...edit }];
-        });
-        setRows(patched);
+  }, [advanced, filters.partnershipId]);
+  const load = useCallback(
+    async (cursor?: Cursor) => {
+      const loadId = ++latestLoad.current;
+      if (cursor) setPaging(true);
+      else {
+        setPaging(false);
+        setNextPage(null);
+        recentEdits.current.clear();
       }
-    } catch (caught) {
-      if (loadId !== latestLoad.current) return;
-      notify(
-        caught instanceof Error ? caught.message : "Could not load requests.",
-        "error",
-      );
-    } finally {
-      if (loadId === latestLoad.current) setLoading(false);
-    }
-  }, [scope, search, status, filters, notify]);
+      try {
+        const params = new URLSearchParams({ scope, paged: "1" });
+        if (cursor) {
+          params.set("beforeAt", cursor.at);
+          params.set("beforeId", cursor.id);
+        }
+        if (search.trim()) params.set("q", search.trim());
+        if (status) params.set("status", status);
+        if (filters.type) params.set("type", filters.type);
+        if (filters.direction) params.set("direction", filters.direction);
+        if (filters.partnershipId)
+          params.set("partnershipId", filters.partnershipId);
+        if (filters.createdFrom) params.set("createdFrom", filters.createdFrom);
+        if (filters.createdTo) params.set("createdTo", filters.createdTo);
+        const response = await fetch(`/api/requests?${params}`, {
+          cache: "no-store",
+        });
+        const data = await response.json();
+        if (!response.ok)
+          throw new Error(data.error ?? "Could not load requests.");
+        if (loadId === latestLoad.current) {
+          const patched = ((data.requests ?? []) as Row[]).flatMap((row) => {
+            const edit = recentEdits.current.get(row.id);
+            return edit === null ? [] : [{ ...row, ...edit }];
+          });
+          setRows((current) => {
+            if (!cursor) return patched;
+            const ids = new Set(current.map((row) => row.id));
+            return [...current, ...patched.filter((row) => !ids.has(row.id))];
+          });
+          setNextPage(data.nextPage ?? null);
+        }
+      } catch (caught) {
+        if (loadId !== latestLoad.current) return;
+        notify(
+          caught instanceof Error ? caught.message : "Could not load requests.",
+          "error",
+        );
+      } finally {
+        if (loadId === latestLoad.current) {
+          setLoading(false);
+          setPaging(false);
+        }
+      }
+    },
+    [scope, search, status, filters, notify],
+  );
   useEffect(() => {
     const changedSearch = previousSearch.current !== search;
     previousSearch.current = search;
@@ -342,35 +370,69 @@ export default function RequestListWorkspace({
       window.removeEventListener("collabio:request-updated", onUpdate);
   }, [mergeRow]);
 
-  async function markSeen(row: Row) {
-    if (row.first_viewed_at || marking.current.has(row.id)) return;
-    marking.current.add(row.id);
-    try {
-      const response = await fetch("/api/requests", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: row.id, markSeen: true }),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        if (data.request) {
-          // Only apply the automatic transition if the user has not changed status.
-          const { status, ...viewed } = data.request;
-          mergeRow(viewed);
-          if (status === "seen") {
-            const transition = (item: Row) =>
-              item.id === row.id && item.status === "new_request"
-                ? { ...item, status }
-                : item;
-            setRows((current) => current.map(transition));
-            setEditing((current) => (current ? transition(current) : current));
+  const markSeen = useCallback(
+    async (row: Row) => {
+      if (row.import_key || row.first_viewed_at || marking.current.has(row.id))
+        return;
+      marking.current.add(row.id);
+      try {
+        const response = await fetch("/api/requests", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: row.id, markSeen: true }),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.request) {
+            // Only apply the automatic transition if the user has not changed status.
+            const { status, ...viewed } = data.request;
+            mergeRow(viewed);
+            if (status === "seen") {
+              const transition = (item: Row) =>
+                item.id === row.id && item.status === "new_request"
+                  ? { ...item, status }
+                  : item;
+              setRows((current) => current.map(transition));
+              setEditing((current) =>
+                current ? transition(current) : current,
+              );
+            }
           }
         }
+      } finally {
+        marking.current.delete(row.id);
       }
-    } finally {
-      marking.current.delete(row.id);
+    },
+    [mergeRow],
+  );
+
+  useEffect(() => {
+    if (!initialRequestId) return;
+    const controller = new AbortController();
+    async function loadRequest() {
+      const params = new URLSearchParams({ requestId: initialRequestId! });
+      try {
+        const response = await fetch(`/api/requests?${params}`, {
+          signal: controller.signal,
+        });
+        const result = await response.json();
+        if (controller.signal.aborted) return;
+        const row = result.requests?.[0] as Row | undefined;
+        if (!response.ok || !row)
+          throw new Error("This request is unavailable in your workspace.");
+        setDetails({ row, mode: "view" });
+        if (row.isReceiver) void markSeen(row).catch(() => {});
+      } catch (error) {
+        if (!controller.signal.aborted)
+          notify(
+            error instanceof Error ? error.message : "Could not open request.",
+            "error",
+          );
+      }
     }
-  }
+    void loadRequest();
+    return () => controller.abort();
+  }, [initialRequestId, markSeen, notify]);
 
   async function update(row: Row, body: Record<string, unknown>) {
     if (mutation.current) return false;
@@ -441,11 +503,13 @@ export default function RequestListWorkspace({
   const overdue = (row: Row) =>
     row.was_overdue ||
     row.status === "overdue" ||
-    (new Date(row.deadline_at) < new Date() && !row.first_viewed_at);
+    (!row.import_key &&
+      new Date(row.deadline_at) < new Date() &&
+      !row.first_viewed_at);
 
   function openRequest(row: Row) {
     setDetails({ row, mode: "view" });
-    if (scope === "inbox" && !row.first_viewed_at)
+    if (row.isReceiver && !row.first_viewed_at)
       void markSeen(row).catch(() => {});
   }
 
@@ -828,6 +892,17 @@ export default function RequestListWorkspace({
         </section>
       )}
 
+      {nextPage && (
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={paging}
+          onClick={() => void load(nextPage)}
+        >
+          {paging ? "Loading older requests…" : "Load older requests"}
+        </Button>
+      )}
+
       <Dialog
         open={presetOpen}
         onOpenChange={(open) => {
@@ -901,7 +976,9 @@ export default function RequestListWorkspace({
                 Target link ↗
               </a>
               <p className="text-[var(--muted)]">
-                Review deadline · {displayDate(activeRow.deadline_at)}
+                {activeRow.import_key
+                  ? "Historical request · No active review timer"
+                  : `Review deadline · ${displayDate(activeRow.deadline_at)}`}
               </p>
             </div>
             <EditRequestForm

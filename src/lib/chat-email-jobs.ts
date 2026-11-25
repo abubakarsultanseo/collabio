@@ -1,3 +1,4 @@
+import { requestEmail } from "@/lib/email-notifications";
 import { Resend } from "resend";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -22,12 +23,20 @@ export async function deliverRequestChatEmails(jobId?: string) {
   await Promise.all(
     ((data ?? []) as Job[]).map(async (job) => {
       try {
-        const { data: recipient, error: lookupError } = await db
-          .from("profiles")
-          .select("email")
-          .eq("id", job.recipient_id)
-          .eq("account_status", "active")
-          .maybeSingle();
+        const [{ data: recipient, error: lookupError }, { data: message }] =
+          await Promise.all([
+            db
+              .from("profiles")
+              .select("email,full_name")
+              .eq("id", job.recipient_id)
+              .eq("account_status", "active")
+              .maybeSingle(),
+            db
+              .from("request_comments")
+              .select("author_id")
+              .eq("id", job.id)
+              .maybeSingle(),
+          ]);
         if (lookupError) throw lookupError;
         if (recipient?.email) {
           const { error: sendError } = await resend.emails.send(
@@ -35,8 +44,15 @@ export async function deliverRequestChatEmails(jobId?: string) {
               from:
                 process.env.EMAIL_FROM ?? "Collabio <partners@collabio.online>",
               to: recipient.email,
-              subject: "New Collabio request message",
-              text: `There is a new message on your request: ${job.anchor}. Sign in to Collabio to read it.`,
+              ...(await requestEmail(db, {
+                requestId: job.request_id,
+                subject: "New request message",
+                message: "There is a new message on this request.",
+                template: "comment_received",
+                anchor: job.anchor,
+                actorId: message?.author_id,
+                recipient: recipient.full_name,
+              })),
             },
             { idempotencyKey: `collabio-request-chat/${job.id}` },
           );

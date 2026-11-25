@@ -111,6 +111,22 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const partnershipId = url.searchParams.get("partnershipId");
     const scope = url.searchParams.get("scope");
+    const paged = url.searchParams.get("paged") === "1";
+    const pageSize = 60;
+    const beforeAt = url.searchParams.get("beforeAt");
+    const beforeId = url.searchParams.get("beforeId");
+    if (
+      (beforeAt || beforeId) &&
+      (!z.string().datetime({ offset: true }).safeParse(beforeAt).success ||
+        !z.string().uuid().safeParse(beforeId).success)
+    )
+      return NextResponse.json(
+        { error: "Invalid request page." },
+        { status: 400 },
+      );
+    const requestId = url.searchParams.get("requestId");
+    if (requestId && !z.string().uuid().safeParse(requestId).success)
+      return NextResponse.json({ error: "Invalid request." }, { status: 400 });
     const status = url.searchParams.get("status");
     const requestType = url.searchParams.get("type");
     const direction = url.searchParams.get("direction");
@@ -121,11 +137,16 @@ export async function GET(request: Request) {
       .trim()
       .slice(0, 80);
     const db = createAdminClient();
-    const accessibleIds = await accessiblePartnershipIds(
-      current.user.id,
-      current.role,
-      db,
-    );
+    const [accessibleIds, permission] = await Promise.all([
+      accessiblePartnershipIds(current.user.id, current.role, db),
+      current.role === "admin"
+        ? Promise.resolve(null)
+        : db
+            .from("partner_permissions")
+            .select("view_requests,update_request_status")
+            .eq("partner_id", current.user.id)
+            .maybeSingle(),
+    ]);
     if (partnershipId && !accessibleIds.includes(partnershipId))
       return NextResponse.json(
         { error: "Workspace access denied." },
@@ -134,29 +155,27 @@ export async function GET(request: Request) {
     const ids = partnershipId ? [partnershipId] : accessibleIds;
     if (!ids.length)
       return NextResponse.json({ requests: [], currentSide: null });
-    let partnerCanUpdateStatus = false;
-    if (current.role !== "admin") {
-      const db = createAdminClient();
-      const { data: permission, error: permissionError } = await db
-        .from("partner_permissions")
-        .select("view_requests,update_request_status")
-        .eq("partner_id", current.user.id)
-        .maybeSingle();
-      if (permissionError) throw permissionError;
-      partnerCanUpdateStatus = permission?.update_request_status === true;
-      if (permission?.view_requests === false)
-        return NextResponse.json(
-          { error: "Your admin has disabled request access." },
-          { status: 403 },
-        );
-    }
+    if (permission?.error) throw permission.error;
+    if (permission?.data?.view_requests === false)
+      return NextResponse.json(
+        { error: "Your admin has disabled request access." },
+        { status: 403 },
+      );
+    const partnerCanUpdateStatus =
+      permission?.data?.update_request_status === true;
     let query = db
       .from("requests")
       .select(
-        "id,request_code,partnership_id,deal_id,link_side,partner_id,sender_id,receiver_id,direction,placement_page_url,anchor_text,target_link,request_type,instructions,notes,status,first_viewed_at,deadline_at,was_overdue,overdue_at,completed_at,created_at,updated_at,shared_at,live_at,rejection_reason",
+        "id,request_code,partnership_id,deal_id,link_side,partner_id,sender_id,receiver_id,direction,placement_page_url,anchor_text,target_link,request_type,instructions,notes,status,first_viewed_at,deadline_at,was_overdue,overdue_at,completed_at,created_at,updated_at,shared_at,live_at,rejection_reason,import_key",
       )
       .in("partnership_id", ids)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false });
+    if (beforeAt && beforeId)
+      query = query.or(
+        `created_at.lt.${beforeAt},and(created_at.eq.${beforeAt},id.lt.${beforeId})`,
+      );
+    if (requestId) query = query.eq("id", requestId);
     if (scope === "inbox") query = query.eq("receiver_id", current.user.id);
     if (scope === "sent") query = query.eq("sender_id", current.user.id);
     if (scope === "pending")
@@ -190,9 +209,18 @@ export async function GET(request: Request) {
       if (/^\d+$/.test(search)) terms.push(`request_code.eq.${Number(search)}`);
       query = query.or(terms.join(","));
     }
-    const { data, error } = await query.limit(500);
+    const { data, error } = await query.limit(
+      requestId ? 1 : paged ? pageSize + 1 : 500,
+    );
     if (error) throw error;
-    const rows = data ?? [];
+    const rows = paged ? (data ?? []).slice(0, pageSize) : (data ?? []);
+    const last =
+      (data?.length ?? 0) > pageSize && paged ? rows.at(-1) : undefined;
+    if (!rows.length)
+      return NextResponse.json({ requests: [], currentSide: null });
+    const resultPartnershipIds = [
+      ...new Set(rows.map((row) => row.partnership_id)),
+    ];
     const partyIds = [
       ...new Set(
         rows.flatMap((item) => [
@@ -209,7 +237,7 @@ export async function GET(request: Request) {
       db
         .from("partnerships")
         .select("id,name,user_a_id,user_b_id")
-        .in("id", ids),
+        .in("id", resultPartnershipIds),
     ]);
     const profileMap = Object.fromEntries(
       (profiles ?? []).map((item) => [item.id, item]),
@@ -224,6 +252,7 @@ export async function GET(request: Request) {
         receiver: profileMap[item.receiver_id] ?? null,
         partner: profileMap[item.partner_id] ?? null,
         workspace: pairMap[item.partnership_id] ?? null,
+        isReceiver: item.receiver_id === current.user.id,
         canManage: current.role === "admin",
         canChangeStatus:
           current.role === "admin" ||
@@ -231,6 +260,7 @@ export async function GET(request: Request) {
             [item.sender_id, item.receiver_id].includes(current.user.id)),
       })),
       currentSide: null,
+      ...(last ? { nextPage: { at: last.created_at, id: last.id } } : {}),
     });
   } catch (error) {
     return NextResponse.json(
@@ -349,13 +379,17 @@ export async function POST(request: Request) {
       .select("id,request_code,deadline_at")
       .single();
     if (error) throw error;
-    await sendCollabEmail(db, {
-      to: receiver.email,
-      requestId: created.id,
-      template: "new_request",
-      subject: "New Collabio request",
-      message: `${sender.full_name} sent you a collaboration request.`,
-      anchor: input.anchorText,
+    after(async () => {
+      await sendCollabEmail(db, {
+        to: receiver.email,
+        requestId: created.id,
+        template: "new_request",
+        subject: "New Collabio request",
+        message: `${sender.full_name} sent you a collaboration request.`,
+        anchor: input.anchorText,
+        actor: sender.full_name,
+        recipient: receiver.full_name,
+      });
     });
     return NextResponse.json(
       { success: true, ...created, receiverId },
@@ -406,6 +440,7 @@ export async function PATCH(request: Request) {
         { status: 403 },
       );
     if (markSeen) {
+      if (row.import_key) return NextResponse.json({ success: true });
       if (current.role !== "admin") {
         const { data: allowed, error } = await current.auth
           .from("requests")
@@ -433,7 +468,7 @@ export async function PATCH(request: Request) {
         after(async () => {
           const { data: sender } = await db
             .from("profiles")
-            .select("email")
+            .select("email,full_name")
             .eq("id", row.sender_id)
             .maybeSingle();
           await sendCollabEmail(db, {
@@ -443,6 +478,8 @@ export async function PATCH(request: Request) {
             subject: "Your Collabio request was viewed",
             message: "The receiver opened your collaboration request.",
             anchor: row.anchor_text,
+            actorId: current.user.id,
+            recipient: sender?.full_name,
           });
         });
       }
@@ -513,7 +550,7 @@ export async function PATCH(request: Request) {
       after(async () => {
         const { data: recipient } = await db
           .from("profiles")
-          .select("email")
+          .select("email,full_name")
           .eq("id", recipientId)
           .maybeSingle();
         await sendCollabEmail(db, {
@@ -523,6 +560,11 @@ export async function PATCH(request: Request) {
           subject: "Collabio request status changed",
           message: `A collaboration request status changed to ${status.replaceAll("_", " ")}.`,
           anchor: row.anchor_text,
+          actorId: current.user.id,
+          recipient: recipient?.full_name,
+          fromStatus: row.status,
+          toStatus: status,
+          reason: status === "rejected" ? updated.rejection_reason : undefined,
         });
       });
     }

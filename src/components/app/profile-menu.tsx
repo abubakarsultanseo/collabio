@@ -3,6 +3,7 @@
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import { useRef } from "react";
 import { ChevronDown, LogOut } from "lucide-react";
+import { Avatar } from "@/components/app/avatar";
 import { Button } from "@/components/ui/button";
 
 export type MenuProfile = {
@@ -10,18 +11,11 @@ export type MenuProfile = {
   email: string;
   role: string;
   status: string;
+  avatarUrl?: string | null;
 };
 
 export function ProfileMenu({ profile }: { profile: MenuProfile }) {
   const signOut = useRef<HTMLFormElement>(null);
-  const initials = profile.name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
-
   return (
     <Dropdown.Root>
       <Dropdown.Trigger asChild>
@@ -31,12 +25,11 @@ export function ProfileMenu({ profile }: { profile: MenuProfile }) {
           className="h-9 max-w-44 px-2"
           aria-label="Account menu"
         >
-          <span
-            className="grid size-6 shrink-0 place-items-center rounded-full bg-[var(--brand-soft)] text-[10px] font-bold text-[var(--brand-dark)]"
-            aria-hidden
-          >
-            {initials || "C"}
-          </span>
+          <Avatar
+            name={profile.name}
+            url={profile.avatarUrl}
+            className="size-6 text-[10px]"
+          />
           <span className="hidden truncate md:inline">{profile.name}</span>
           <ChevronDown size={14} className="shrink-0" aria-hidden />
         </Button>

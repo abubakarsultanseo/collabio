@@ -1,2 +1,16 @@
 import RequestListWorkspace from "@/components/request-list-workspace";
-export default function InboxPage(){return <RequestListWorkspace scope="inbox" title="Requests Inbox"/>;}
+
+export default async function InboxPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ request?: string }>;
+}) {
+  const { request } = await searchParams;
+  return (
+    <RequestListWorkspace
+      scope="inbox"
+      title="Requests Inbox"
+      initialRequestId={request}
+    />
+  );
+}

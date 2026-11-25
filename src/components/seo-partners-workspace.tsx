@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useToast } from "@/components/app/toast";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Partner = {
   id: string;
@@ -94,40 +94,56 @@ export default function SeoPartnersWorkspace({
   const [ownerFilter, setOwnerFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const lastRequest = useRef(0);
 
   const [editing, setEditing] = useState<Partner | null>(null);
   const [form, setForm] = useState<FormValues>(blank);
   const [modalOpen, setModalOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<Partner | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (search.trim()) params.set("q", search.trim());
-      if (statusFilter) params.set("status", statusFilter);
-      if (isAdmin && ownerFilter) params.set("ownerId", ownerFilter);
-      const response = await fetch(`/api/seo-partners?${params.toString()}`, {
-        cache: "no-store",
-      });
-      const data = await response.json();
-      if (!response.ok)
-        throw new Error(data.error ?? "Could not load partners.");
-      setPartners(data.partners ?? []);
-    } catch (caught) {
-      notify(
-        caught instanceof Error ? caught.message : "Could not load partners.",
-        "error",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [search, statusFilter, ownerFilter, isAdmin, notify]);
+  const load = useCallback(
+    async (signal?: AbortSignal) => {
+      const requestId = ++lastRequest.current;
+      setLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (search.trim()) params.set("q", search.trim());
+        if (statusFilter) params.set("status", statusFilter);
+        if (isAdmin && ownerFilter) params.set("ownerId", ownerFilter);
+        const response = await fetch(`/api/seo-partners?${params.toString()}`, {
+          cache: "no-store",
+          signal,
+        });
+        const data = await response.json();
+        if (!response.ok)
+          throw new Error(data.error ?? "Could not load partners.");
+        if (requestId === lastRequest.current && !signal?.aborted)
+          setPartners(data.partners ?? []);
+      } catch (caught) {
+        if (requestId !== lastRequest.current || signal?.aborted) return;
+        notify(
+          caught instanceof Error ? caught.message : "Could not load partners.",
+          "error",
+        );
+      } finally {
+        if (requestId === lastRequest.current && !signal?.aborted)
+          setLoading(false);
+      }
+    },
+    [search, statusFilter, ownerFilter, isAdmin, notify],
+  );
 
   useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 250);
-    return () => window.clearTimeout(timer);
-  }, [load]);
+    const controller = new AbortController();
+    const timer = window.setTimeout(
+      () => void load(controller.signal),
+      search.trim() ? 180 : 0,
+    );
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [load, search]);
   useEffect(() => {
     if (!isAdmin) return;
     fetch("/api/team", { cache: "no-store" })

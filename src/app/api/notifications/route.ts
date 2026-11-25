@@ -36,23 +36,34 @@ export async function GET(request: Request) {
     const state = await access();
     if ("error" in state) return state.error;
     const db = createAdminClient();
-    if (new URL(request.url).searchParams.get("mode") === "count") {
-      const { count, error } = await db
+    const mode = new URL(request.url).searchParams.get("mode");
+    const count = () =>
+      db
         .from("notifications")
         .select("id", { count: "exact", head: true })
         .eq("recipient_id", state.user.id)
         .is("read_at", null);
+    if (mode === "count") {
+      const { count: unread, error } = await count();
       if (error) throw error;
-      return NextResponse.json({ unread: count ?? 0 });
+      return NextResponse.json({ unread: unread ?? 0 });
     }
-    const { data, error } = await db
+    const listing = db
       .from("notifications")
       .select("id,request_id,type,title,description,read_at,created_at")
       .eq("recipient_id", state.user.id)
       .order("created_at", { ascending: false })
-      .limit(100);
+      .limit(mode === "preview" ? 8 : 100);
+    const [{ data, error }, unread] = await Promise.all([
+      listing,
+      mode === "preview" ? count() : Promise.resolve(null),
+    ]);
     if (error) throw error;
-    return NextResponse.json({ notifications: data ?? [] });
+    if (unread?.error) throw unread.error;
+    return NextResponse.json({
+      notifications: data ?? [],
+      ...(unread ? { unread: unread.count ?? 0 } : {}),
+    });
   } catch (error) {
     return NextResponse.json(
       {

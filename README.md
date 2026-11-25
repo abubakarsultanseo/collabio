@@ -59,3 +59,13 @@ Install Node.js LTS, then run `npm install`, copy `.env.example` to `.env.local`
 ## Verification
 
 Run `npm run typecheck`, `npm run lint`, and `npm run build` before deploying. Verify live Supabase, Resend, and OAuth behavior in a preview. The included GitHub Actions workflow calls the reminder endpoint on a 30-minute schedule. When using the workflow, set the same `CRON_SECRET` in Vercel and GitHub Actions.
+
+## Google sign-in, branded email, and historical imports
+
+1. Apply `supabase/migrations/0008_partner_onboarding.sql` once, after 0007 and before deploying this build.
+2. Enable the Google provider in **Supabase → Authentication → Providers**. Keep the Supabase callback URL in Google Cloud's authorized redirect URIs and add the app's exact `/auth/callback` URL to Supabase's redirect allowlist for production and the Vercel Preview you use for testing.
+3. Verify that the existing admin can sign in with Google using the email of their existing Collabio account. Verify an invited partner can accept with the invited Google address and gets an error if they select another account. Collabio's sign-in page now offers Google only.
+4. Set `NEXT_PUBLIC_SITE_URL` to the deployed Collabio origin so Resend emails point to the correct request or conversation. Preview a status email in Gmail or Outlook and check its subject, named actor, before and after status, rejection reason, and request link.
+5. For each partner, go to **Import requests**, download the CSV template, and map the sheet to the template. Select **Sent** for your original requests and **Received** for the partner's original requests. Use the exact invited Google email. Preview the counts and flagged rows, confirm the import, and verify the requests in the partner workspace before sending an invitation. The import stores historical requests without triggering new request emails or review reminders. It can stage a pending account when the partner has one yet to activate.
+
+Use batches of up to 1,000 rows or 2 MB per CSV. Add a stable `source_id` when available to help identify repeat uploads. Keep original dates in ISO format and supply the original reason for rejected records. The importer flags ambiguous or invalid rows for review before saving.

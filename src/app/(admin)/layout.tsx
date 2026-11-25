@@ -26,6 +26,7 @@ export default async function WorkspaceLayout({
           <div className="w-full px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
             <Topbar
               profile={{
+                avatarUrl: profile?.avatar_url,
                 name: profile?.full_name || user.email || "Account",
                 email: profile?.email ?? user.email ?? "",
                 role,

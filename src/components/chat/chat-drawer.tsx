@@ -231,7 +231,7 @@ export function ChatHost({
               <Dialog.Description className="sr-only">
                 Read and reply to messages.
               </Dialog.Description>
-              <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-1.5">
+              <div className="relative flex shrink-0 items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-1.5">
                 <div className="flex min-w-0 items-center gap-1">
                   {isAdmin && active?.kind === "direct" && (
                     <Button
@@ -269,7 +269,7 @@ export function ChatHost({
                     size="icon"
                     aria-label="Drag chat window"
                     title="Drag to move"
-                    className="hidden touch-none cursor-grab active:cursor-grabbing md:inline-flex"
+                    className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 touch-none cursor-grab active:cursor-grabbing md:inline-flex"
                     onPointerDown={beginDrag}
                     onPointerMove={moveDrag}
                     onPointerUp={finishDrag}

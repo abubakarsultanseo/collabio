@@ -1,4 +1,5 @@
 "use client";
+import { notificationLink } from "@/lib/notification-link";
 import { buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/app/empty-state";
 import { Bell } from "lucide-react";
@@ -77,7 +78,8 @@ export default function NotificationsWorkspace() {
           items.map((item) => (
             <Link
               key={item.id}
-              href={item.request_id ? "/requests/inbox" : "/team"}
+              id={`notification-${item.id}`}
+              href={notificationLink(item)}
               onClick={() => void mark(item)}
               className={`block p-5 hover:bg-[var(--canvas)] ${item.read_at ? "" : "bg-[var(--info-bg)]"}`}
             >

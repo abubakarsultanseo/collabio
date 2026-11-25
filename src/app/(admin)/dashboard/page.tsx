@@ -48,7 +48,7 @@ export default async function Dashboard() {
       ? db
           .from("requests")
           .select(
-            "id,partnership_id,sender_id,receiver_id,partner_id,status,anchor_text,placement_page_url,deadline_at,first_viewed_at,was_overdue,created_at,request_type",
+            "id,partnership_id,sender_id,receiver_id,partner_id,status,anchor_text,placement_page_url,deadline_at,first_viewed_at,was_overdue,created_at,request_type,import_key",
           )
           .in("partnership_id", ids)
           .order("created_at", { ascending: false })
@@ -76,6 +76,7 @@ export default async function Dashboard() {
   const awaitingReview = all.filter(
     (row) =>
       row.receiver_id === user.id &&
+      !row.import_key &&
       !row.first_viewed_at &&
       row.status === "new_request",
   ).length;
@@ -83,7 +84,9 @@ export default async function Dashboard() {
     (row) =>
       row.was_overdue ||
       row.status === "overdue" ||
-      (new Date(row.deadline_at) < new Date() && !row.first_viewed_at),
+      (!row.import_key &&
+        new Date(row.deadline_at) < new Date() &&
+        !row.first_viewed_at),
   ).length;
   const live = all.filter((row) => row.status === "live").length;
   const recent = all.slice(0, 8);

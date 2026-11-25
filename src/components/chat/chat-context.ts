@@ -6,6 +6,7 @@ export type ChatTarget = {
   kind: "request" | "direct";
   threadId: string;
   title?: string;
+  avatarUrl?: string | null;
   onRead?: (id: string) => void;
   nextUnread?: () => ChatTarget | undefined;
 };

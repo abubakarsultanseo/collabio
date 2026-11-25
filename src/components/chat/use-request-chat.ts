@@ -31,16 +31,29 @@ export function useRequestChat(rows: SourceRow[]) {
       loading = true;
       const started = Date.now();
       try {
-        const response = await fetch("/api/chats", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "unread", ids: ids.split(",") }),
-          signal: controller.signal,
-        });
-        if (!response.ok || controller.signal.aborted) return;
-        const { counts: results } = (await response.json()) as {
-          counts: Array<{ thread_id: string; unread: number }>;
-        };
+        const requestIds = ids.split(",");
+        const batches: string[][] = [];
+        for (let index = 0; index < requestIds.length; index += 500)
+          batches.push(requestIds.slice(index, index + 500));
+        const results = (
+          await Promise.all(
+            batches.map(async (batch) => {
+              const response = await fetch("/api/chats", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "unread", ids: batch }),
+                signal: controller.signal,
+              });
+              if (!response.ok)
+                throw new Error("Could not refresh unread counts.");
+              const { counts } = (await response.json()) as {
+                counts: Array<{ thread_id: string; unread: number }>;
+              };
+              return counts;
+            }),
+          )
+        ).flat();
+        if (controller.signal.aborted) return;
         const next = Object.fromEntries(
           results
             .filter(

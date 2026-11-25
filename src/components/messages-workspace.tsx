@@ -3,6 +3,7 @@
 import { MessageSquare, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useChat, type ChatTarget } from "@/components/chat/chat-context";
+import { Avatar } from "@/components/app/avatar";
 import { EmptyState } from "@/components/app/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,7 @@ import { cn } from "@/lib/utils";
 type Contact = {
   id: string;
   name: string;
+  avatar_url?: string | null;
   latest_at?: string | null;
   unread: number;
 };
@@ -45,6 +47,7 @@ export default function MessagesWorkspace({
         kind: "direct",
         threadId: contact.id,
         title: contact.name,
+        avatarUrl: contact.avatar_url,
         onRead: read,
         nextUnread: () => {
           const next = contactRef.current.find(
@@ -187,12 +190,11 @@ export default function MessagesWorkspace({
                     )}
                     onClick={() => open(select(contact))}
                   >
-                    <span
-                      aria-hidden
-                      className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--brand-soft)] text-sm font-semibold text-[var(--brand-dark)]"
-                    >
-                      {contact.name.charAt(0).toUpperCase()}
-                    </span>
+                    <Avatar
+                      name={contact.name}
+                      url={contact.avatar_url}
+                      className="size-9"
+                    />
                     <span
                       className="min-w-0 flex-1 truncate text-sm font-medium"
                       title={contact.name}

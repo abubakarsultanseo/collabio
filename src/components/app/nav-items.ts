@@ -57,6 +57,7 @@ export const workspaceItems: NavItem[] = [
 export const adminItems: NavItem[] = [
   { label: "Partner Permissions", href: "/permissions", icon: ShieldCheck },
   { label: "Team & Invitations", href: "/team", icon: Users },
+  { label: "Import requests", href: "/requests/import", icon: Inbox },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
 

@@ -10,6 +10,7 @@ import {
 } from "react";
 import { Copy, ExternalLink, Send } from "lucide-react";
 import type { ChatTarget } from "@/components/chat/chat-context";
+import { Avatar } from "@/components/app/avatar";
 import { useToast } from "@/components/app/toast";
 import { StatusBadge, formatStatus } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 type Message = {
   id: string;
   author_id: string;
+  author?: { full_name: string; avatar_url: string | null } | null;
   body: string;
   created_at: string;
 };
@@ -37,6 +39,7 @@ type ThreadResponse = {
   userId: string;
   canWrite: boolean;
   title?: string;
+  avatar_url?: string | null;
   request?: RequestDetails;
 };
 
@@ -372,9 +375,14 @@ export function ChatThread({
     <>
       <header className="shrink-0 space-y-3 border-b border-[var(--border)] p-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <h2 className="min-w-0 break-words text-base font-semibold">
-            {title}
-          </h2>
+          <div className="flex min-w-0 items-center gap-2">
+            {target.kind === "direct" && (
+              <Avatar name={title} url={info?.avatar_url ?? target.avatarUrl} />
+            )}
+            <h2 className="min-w-0 break-words text-base font-semibold">
+              {title}
+            </h2>
+          </div>
           {next && (
             <Button
               variant="secondary"
@@ -478,16 +486,26 @@ export function ChatThread({
           return (
             <div
               key={message.id}
-              className={`flex ${own ? "justify-end" : "justify-start"}`}
+              className={`flex items-end gap-2 ${own ? "flex-row-reverse" : "justify-start"}`}
             >
+              <Avatar
+                name={message.author?.full_name ?? (own ? "You" : title)}
+                url={message.author?.avatar_url}
+                className="size-6 text-[9px]"
+              />
               <div
-                className={`max-w-[88%] rounded-xl border border-[var(--border)] px-3 py-2 ${own ? "bg-[var(--brand-soft)]" : "bg-[var(--card)]"}`}
+                className={`min-w-0 max-w-[82%] rounded-xl border border-[var(--border)] px-3 py-2 ${own ? "bg-[var(--brand-soft)]" : "bg-[var(--card)]"}`}
               >
                 <p className="whitespace-pre-wrap break-words text-sm">
                   <LinkifiedMessage text={message.body} />
                 </p>
                 <p className="mt-1 text-[10px] text-[var(--muted)]">
-                  {own ? "You" : (info?.title ?? "Other participant")} ·{" "}
+                  {own
+                    ? "You"
+                    : (message.author?.full_name ??
+                      info?.title ??
+                      "Other participant")}{" "}
+                  ·{" "}
                   <time dateTime={message.created_at}>
                     {date(message.created_at)}
                   </time>

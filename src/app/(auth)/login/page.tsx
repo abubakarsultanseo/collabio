@@ -1,89 +1,44 @@
-"use client";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { getProfile } from "@/server/profile";
+import { AuthCard } from "@/components/app/auth-card";
+import { GoogleSignIn } from "@/components/app/google-sign-in";
+import { returnPath } from "@/lib/return-path";
 
-import { useState, type FormEvent } from "react";
-import { AuthCard, AuthError } from "@/components/app/auth-card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+const messages: Record<string, string> = {
+  invite_required:
+    "This Google account does not have access. Open your invitation or ask your admin for one.",
+  wrong_account:
+    "Use the exact Google email address that received the invitation.",
+  invalid_invite:
+    "This invitation is expired or unavailable. Ask the admin for a new invitation.",
+  account_inactive: "This account is inactive. Contact your workspace admin.",
+  sign_in: "Google sign-in was not completed. Please try again.",
+};
 
-export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true);
-    setError("");
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    if (error) {
-      setError(error.message);
-      setBusy(false);
-      return;
-    }
-    window.location.href = "/dashboard";
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string; error?: string }>;
+}) {
+  const { next, error } = await searchParams;
+  if (next && !error) {
+    const auth = await createClient();
+    const {
+      data: { user },
+    } = await auth.auth.getUser();
+    if (user && (await getProfile(user.id))?.account_status === "active")
+      redirect(returnPath(next));
   }
-
-  async function google() {
-    setError("");
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
-    });
-    if (error) setError(error.message);
-  }
-
   return (
     <AuthCard
-      title="Sign in"
-      description="Use your invited account to continue."
+      title="Sign in to Collabio"
+      description="Continue with the Google email address invited to your workspace."
     >
-      <form onSubmit={submit} className="space-y-4">
-        <div className="space-y-1">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="password">Password</Label>
-          <Input
-            id="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-        </div>
-        {error && <AuthError>{error}</AuthError>}
-        <Button type="submit" disabled={busy} className="w-full">
-          {busy ? "Signing in…" : "Sign in"}
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={google}
-          className="w-full"
-        >
-          Continue with Google
-        </Button>
-      </form>
-      <p className="mt-5 text-xs text-[var(--muted)]">
-        An administrator must invite you before you can create an account.
-      </p>
+      <GoogleSignIn
+        next={returnPath(next)}
+        initialError={error ? messages[error] : undefined}
+      />
     </AuthCard>
   );
 }

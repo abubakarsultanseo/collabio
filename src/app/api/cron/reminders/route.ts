@@ -1,3 +1,4 @@
+import { requestEmail } from "@/lib/email-notifications";
 import { deliverRequestChatEmails } from "@/lib/chat-email-jobs";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
@@ -130,15 +131,13 @@ async function sendEmail(
   description: string,
 ) {
   const key = `${jobId}:reminder`;
-  const { error: logError } = await db
-    .from("email_logs")
-    .insert({
-      recipient_email: email ?? "unknown",
-      template_key: jobType,
-      request_id: requestId,
-      idempotency_key: key,
-      status: "queued",
-    });
+  const { error: logError } = await db.from("email_logs").insert({
+    recipient_email: email ?? "unknown",
+    template_key: jobType,
+    request_id: requestId,
+    idempotency_key: key,
+    status: "queued",
+  });
   if (logError && logError.code !== "23505") throw logError;
   if (logError?.code === "23505") return;
   let status = "failed";
@@ -148,11 +147,17 @@ async function sendEmail(
     const sent = await resend.emails.send({
       from: process.env.EMAIL_FROM ?? "Collabio <partners@collabio.online>",
       to: email,
-      subject:
-        jobType === "24_hour_overdue"
-          ? "Collabio request is overdue"
-          : "Collabio request reminder",
-      html: `<p>${escapeHtml(description)}</p><p><strong>${escapeHtml(anchor)}</strong></p><p>Open Collabio to review the request and continue the collaboration.</p>`,
+      ...(await requestEmail(db, {
+        requestId,
+        template: jobType,
+        subject:
+          jobType === "24_hour_overdue"
+            ? "Review deadline missed"
+            : "Request review reminder",
+        message: description,
+        anchor,
+        actor: "Collabio reminder",
+      })),
     });
     if (sent.error) errorMessage = sent.error.message;
     else {
@@ -170,13 +175,4 @@ async function sendEmail(
       sent_at: status === "sent" ? new Date().toISOString() : null,
     })
     .eq("idempotency_key", key);
-}
-function escapeHtml(value: string) {
-  return value.replace(
-    /[&<>"']/g,
-    (char) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
-        char
-      ]!,
-  );
 }

@@ -1,17 +1,153 @@
-import {NextResponse} from "next/server";
-import {z} from "zod";
-import {createClient} from "@/lib/supabase/server";
-import {createAdminClient} from "@/lib/supabase/admin";
-import {sendCollabEmail} from "@/lib/email-notifications";
+import { after } from "next/server";
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { sendCollabEmail } from "@/lib/email-notifications";
 
-const itemSchema=z.object({placementPageUrl:z.string().url().max(2048),anchorText:z.string().trim().min(1).max(500),targetLink:z.string().url().max(2048),requestType:z.enum(["guest_post","link_insertion","other"]).default("other"),instructions:z.string().max(5000).optional(),notes:z.string().max(5000).optional()});
-const schema=z.object({partnershipId:z.string().uuid(),requests:z.array(itemSchema).min(1).max(50)});
-export async function POST(request:Request){try{
- const auth=await createClient();const {data:{user}}=await auth.auth.getUser();if(!user)return NextResponse.json({error:"Authentication required."},{status:401});const {data:profile,error:profileError}=await auth.from("profiles").select("role,account_status,full_name").eq("id",user.id).maybeSingle();if(profileError)throw profileError;if(profile?.account_status!=="active")return NextResponse.json({error:"Active account required."},{status:403});
- const parsed=schema.safeParse(await request.json());if(!parsed.success)return NextResponse.json({error:parsed.error.issues[0]?.message??"Enter valid request details."},{status:400});const db=createAdminClient();let pairs=db.from("partnerships").select("id,name,user_a_id,user_b_id");if(profile.role!=="admin")pairs=pairs.or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`);const {data:accessible,error:pairError}=await pairs;if(pairError)throw pairError;const pair=(accessible??[]).find(item=>item.id===parsed.data.partnershipId);if(!pair)return NextResponse.json({error:"Workspace access denied."},{status:403});
- const receiverId=pair.user_a_id===user.id?pair.user_b_id:pair.user_a_id;const {data:people,error:peopleError}=await db.from("profiles").select("id,role,account_status,email,full_name").in("id",[pair.user_a_id,pair.user_b_id]);if(peopleError)throw peopleError;const receiver=people?.find(item=>item.id===receiverId);const partner=people?.find(item=>item.role==="partner");if(!receiver||receiver.account_status!=="active"||!partner||partner.account_status!=="active")return NextResponse.json({error:"Both workspace members must have active accounts."},{status:409});
- if(profile.role!=="admin"){const {data:permission,error}=await db.from("partner_permissions").select("add_new_requests").eq("partner_id",user.id).maybeSingle();if(error)throw error;if(permission?.add_new_requests===false)return NextResponse.json({error:"Your admin has disabled new requests for your account."},{status:403});}
- const linkSide=pair.user_a_id===user.id?"a":"b";const direction=profile.role==="admin"?"admin_to_partner":"partner_to_admin";const payload=parsed.data.requests.map(item=>({partnership_id:pair.id,deal_id:null,link_side:linkSide,partner_id:partner.id,sender_id:user.id,receiver_id:receiverId,direction,placement_page_url:item.placementPageUrl,anchor_text:item.anchorText,target_link:item.targetLink,request_type:item.requestType,instructions:item.instructions||null,notes:item.notes||null,status:"new_request"}));
- const {data:created,error:createError}=await db.from("requests").insert(payload).select("id,request_code,deadline_at,anchor_text");if(createError)throw createError;await Promise.all((created??[]).map(row=>sendCollabEmail(db,{to:receiver.email,requestId:row.id,template:"new_request",subject:"New Collabio request",message:`${profile.full_name??"A workspace member"} sent you a collaboration request.`,anchor:row.anchor_text})));
- return NextResponse.json({success:true,created:created??[],count:created?.length??0},{status:201});
- }catch(error){return NextResponse.json({error:error instanceof Error?error.message:"Could not create bulk requests."},{status:500});}}
+const itemSchema = z.object({
+  placementPageUrl: z.string().url().max(2048),
+  anchorText: z.string().trim().min(1).max(500),
+  targetLink: z.string().url().max(2048),
+  requestType: z
+    .enum(["guest_post", "link_insertion", "other"])
+    .default("other"),
+  instructions: z.string().max(5000).optional(),
+  notes: z.string().max(5000).optional(),
+});
+const schema = z.object({
+  partnershipId: z.string().uuid(),
+  requests: z.array(itemSchema).min(1).max(50),
+});
+export async function POST(request: Request) {
+  try {
+    const auth = await createClient();
+    const {
+      data: { user },
+    } = await auth.auth.getUser();
+    if (!user)
+      return NextResponse.json(
+        { error: "Authentication required." },
+        { status: 401 },
+      );
+    const { data: profile, error: profileError } = await auth
+      .from("profiles")
+      .select("role,account_status,full_name")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (profileError) throw profileError;
+    if (profile?.account_status !== "active")
+      return NextResponse.json(
+        { error: "Active account required." },
+        { status: 403 },
+      );
+    const parsed = schema.safeParse(await request.json());
+    if (!parsed.success)
+      return NextResponse.json(
+        {
+          error:
+            parsed.error.issues[0]?.message ?? "Enter valid request details.",
+        },
+        { status: 400 },
+      );
+    const db = createAdminClient();
+    let pairs = db.from("partnerships").select("id,name,user_a_id,user_b_id");
+    if (profile.role !== "admin")
+      pairs = pairs.or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`);
+    const { data: accessible, error: pairError } = await pairs;
+    if (pairError) throw pairError;
+    const pair = (accessible ?? []).find(
+      (item) => item.id === parsed.data.partnershipId,
+    );
+    if (!pair)
+      return NextResponse.json(
+        { error: "Workspace access denied." },
+        { status: 403 },
+      );
+    const receiverId =
+      pair.user_a_id === user.id ? pair.user_b_id : pair.user_a_id;
+    const { data: people, error: peopleError } = await db
+      .from("profiles")
+      .select("id,role,account_status,email,full_name")
+      .in("id", [pair.user_a_id, pair.user_b_id]);
+    if (peopleError) throw peopleError;
+    const receiver = people?.find((item) => item.id === receiverId);
+    const partner = people?.find((item) => item.role === "partner");
+    if (
+      !receiver ||
+      receiver.account_status !== "active" ||
+      !partner ||
+      partner.account_status !== "active"
+    )
+      return NextResponse.json(
+        { error: "Both workspace members must have active accounts." },
+        { status: 409 },
+      );
+    if (profile.role !== "admin") {
+      const { data: permission, error } = await db
+        .from("partner_permissions")
+        .select("add_new_requests")
+        .eq("partner_id", user.id)
+        .maybeSingle();
+      if (error) throw error;
+      if (permission?.add_new_requests === false)
+        return NextResponse.json(
+          { error: "Your admin has disabled new requests for your account." },
+          { status: 403 },
+        );
+    }
+    const linkSide = pair.user_a_id === user.id ? "a" : "b";
+    const direction =
+      profile.role === "admin" ? "admin_to_partner" : "partner_to_admin";
+    const payload = parsed.data.requests.map((item) => ({
+      partnership_id: pair.id,
+      deal_id: null,
+      link_side: linkSide,
+      partner_id: partner.id,
+      sender_id: user.id,
+      receiver_id: receiverId,
+      direction,
+      placement_page_url: item.placementPageUrl,
+      anchor_text: item.anchorText,
+      target_link: item.targetLink,
+      request_type: item.requestType,
+      instructions: item.instructions || null,
+      notes: item.notes || null,
+      status: "new_request",
+    }));
+    const { data: created, error: createError } = await db
+      .from("requests")
+      .insert(payload)
+      .select("id,request_code,deadline_at,anchor_text");
+    if (createError) throw createError;
+    after(async () => {
+      await Promise.all(
+        (created ?? []).map((row) =>
+          sendCollabEmail(db, {
+            to: receiver.email,
+            requestId: row.id,
+            template: "new_request",
+            subject: "New Collabio request",
+            message: `${profile.full_name ?? "A workspace member"} sent you a collaboration request.`,
+            anchor: row.anchor_text,
+            actor: profile.full_name,
+          }),
+        ),
+      );
+    });
+    return NextResponse.json(
+      { success: true, created: created ?? [], count: created?.length ?? 0 },
+      { status: 201 },
+    );
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Could not create bulk requests.",
+      },
+      { status: 500 },
+    );
+  }
+}

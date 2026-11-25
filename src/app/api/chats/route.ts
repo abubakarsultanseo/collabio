@@ -27,6 +27,8 @@ const writeInput = z.discriminatedUnion("action", [
   unreadInput,
 ]);
 const fields = "id,author_id,body,created_at";
+const directFields = `${fields},author:profiles!direct_chat_messages_author_id_fkey(full_name,avatar_url)`;
+const requestFields = `${fields},author:profiles!request_comments_author_id_fkey(full_name,avatar_url)`;
 const pageSize = 40;
 
 class ChatError extends Error {
@@ -46,7 +48,7 @@ async function context() {
   if (!user) throw new ChatError("Sign in to continue.", 401);
   const { data: profile, error } = await auth
     .from("profiles")
-    .select("role,account_status,full_name")
+    .select("role,account_status,full_name,avatar_url")
     .eq("id", user.id)
     .maybeSingle();
   if (error) throw error;
@@ -63,7 +65,7 @@ async function assignedAdmin(db: Context["db"]) {
   if (configured && !uuid.safeParse(configured).success) return null;
   let query = db
     .from("profiles")
-    .select("id,full_name")
+    .select("id,full_name,avatar_url")
     .eq("role", "admin")
     .eq("account_status", "active");
   if (configured) query = query.eq("id", configured);
@@ -80,12 +82,13 @@ async function directAccess(ctx: Context, peerId: string) {
       adminId: admin.id as string,
       partnerId: ctx.user.id,
       peerName: admin.full_name as string,
+      avatar_url: admin.avatar_url,
     };
   }
   if (ctx.user.id === admin.id) {
     const { data: partner, error } = await ctx.db
       .from("profiles")
-      .select("id,full_name")
+      .select("id,full_name,avatar_url")
       .eq("id", peerId)
       .eq("role", "partner")
       .eq("account_status", "active")
@@ -96,6 +99,7 @@ async function directAccess(ctx: Context, peerId: string) {
         adminId: admin.id as string,
         partnerId: partner.id as string,
         peerName: partner.full_name as string,
+        avatar_url: partner.avatar_url,
       };
   }
   throw new ChatError("Conversation unavailable.", 404);
@@ -104,23 +108,31 @@ async function directAccess(ctx: Context, peerId: string) {
 async function requestAccess(ctx: Context, requestId: string, write = false) {
   // This read uses the signed-in session. The existing request RLS limits it to
   // authorized workspaces before the service client touches any comment data.
-  const { data: row, error } = await ctx.auth
+  const request = ctx.auth
     .from("requests")
     .select(
       "id,request_code,placement_page_url,anchor_text,target_link,request_type,status",
     )
     .eq("id", requestId)
     .maybeSingle();
+  const permissions =
+    ctx.profile.role === "admin"
+      ? Promise.resolve(null)
+      : ctx.auth
+          .from("partner_permissions")
+          .select("add_comments,update_request_status")
+          .eq("partner_id", ctx.user.id)
+          .maybeSingle();
+  const [{ data: row, error }, permissionResult] = await Promise.all([
+    request,
+    permissions,
+  ]);
   if (error) throw error;
   if (!row) throw new ChatError("Conversation unavailable.", 404);
   if (ctx.profile.role === "admin")
     return { row, canWrite: true, canUpdateStatus: true };
-  const { data: permission, error: permissionError } = await ctx.auth
-    .from("partner_permissions")
-    .select("add_comments,update_request_status")
-    .eq("partner_id", ctx.user.id)
-    .maybeSingle();
-  if (permissionError) throw permissionError;
+  if (permissionResult?.error) throw permissionResult.error;
+  const permission = permissionResult?.data;
   const canWrite = permission?.add_comments !== false;
   if (write && !canWrite)
     throw new ChatError("Your admin has disabled comments.", 403);
@@ -137,17 +149,21 @@ async function threadQuery(ctx: Context, thread: Thread) {
     return {
       query: ctx.db
         .from("direct_chat_messages")
-        .select(fields)
+        .select(directFields)
         .eq("admin_id", pair.adminId)
         .eq("partner_id", pair.partnerId),
-      details: { title: pair.peerName, canWrite: true },
+      details: {
+        title: pair.peerName,
+        avatar_url: pair.avatar_url,
+        canWrite: true,
+      },
     };
   }
   const access = await requestAccess(ctx, thread.threadId);
   return {
     query: ctx.db
       .from("request_comments")
-      .select(fields)
+      .select(requestFields)
       .eq("request_id", thread.threadId),
     details: {
       request: access.row,
@@ -201,7 +217,12 @@ export async function GET(request: Request) {
         if (countError) throw countError;
         return NextResponse.json({
           contacts: [
-            { id: admin.id, name: admin.full_name, unread: count ?? 0 },
+            {
+              id: admin.id,
+              name: admin.full_name,
+              avatar_url: admin.avatar_url,
+              unread: count ?? 0,
+            },
           ],
           isAdmin: false,
         });
@@ -212,7 +233,7 @@ export async function GET(request: Request) {
           403,
         );
       const { data, error } = await ctx.db
-        .rpc("direct_chat_contacts", { p_admin: admin.id })
+        .rpc("collabio_chat_contacts", { p_admin: admin.id })
         .limit(1000);
       if (error) throw error;
       return NextResponse.json({ contacts: data ?? [], isAdmin: true });
@@ -299,6 +320,8 @@ export async function POST(request: Request) {
         })
         .single();
       if (error) throw error;
+      if (!saved || typeof saved !== "object")
+        throw new ChatError("Message could not be saved.", 409);
       after(async () => {
         try {
           await deliverRequestChatEmails(data.id);
@@ -307,7 +330,16 @@ export async function POST(request: Request) {
         }
       });
       return NextResponse.json(
-        { message: saved, userId: ctx.user.id },
+        {
+          message: {
+            ...saved,
+            author: {
+              full_name: ctx.profile.full_name,
+              avatar_url: ctx.profile.avatar_url,
+            },
+          },
+          userId: ctx.user.id,
+        },
         { status: 201 },
       );
     }
@@ -338,7 +370,16 @@ export async function POST(request: Request) {
     if (!saved || saved.body !== data.body)
       throw new ChatError("Message could not be saved.", 409);
     return NextResponse.json(
-      { message: saved, userId: ctx.user.id },
+      {
+        message: {
+          ...saved,
+          author: {
+            full_name: ctx.profile.full_name,
+            avatar_url: ctx.profile.avatar_url,
+          },
+        },
+        userId: ctx.user.id,
+      },
       { status: 201 },
     );
   } catch (caught) {

@@ -44,6 +44,7 @@ export type RequestSummary = {
   instructions: string | null;
   notes: string | null;
   deadline_at: string;
+  import_key?: string | null;
   created_at: string;
 };
 
@@ -276,7 +277,12 @@ export function RequestDetails({
     { label: "Instructions", value: row.instructions || "" },
     { label: "Original notes", value: row.notes || "" },
     { label: "Created", value: date(row.created_at) },
-    { label: "Deadline", value: date(row.deadline_at) },
+    {
+      label: "Review deadline",
+      value: row.import_key
+        ? "Historical request · No active timer"
+        : date(row.deadline_at),
+    },
     ...(row.rejection_reason
       ? [{ label: "Rejection reason", value: row.rejection_reason }]
       : []),

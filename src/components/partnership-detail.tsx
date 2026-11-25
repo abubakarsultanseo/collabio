@@ -44,6 +44,7 @@ type RequestRow = {
   rejection_reason?: string | null;
   first_viewed_at: string | null;
   deadline_at: string;
+  import_key?: string | null;
   was_overdue: boolean;
   created_at: string;
   live_at: string | null;
@@ -434,10 +435,9 @@ export default function PartnershipDetail({
                 </div>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t pt-3">
                   <span className="text-[var(--muted)] text-xs">
-                    Review by{" "}
-                    {new Date(row.deadline_at).toLocaleString("en-PK", {
-                      timeZone: "Asia/Karachi",
-                    })}
+                    {row.import_key
+                      ? "Historical request"
+                      : `Review by ${new Date(row.deadline_at).toLocaleString("en-PK", { timeZone: "Asia/Karachi" })}`}
                   </span>
                   <div className="flex items-center gap-3">
                     <Button

@@ -12,15 +12,14 @@ const themeBootstrap = `
   (function () {
     var preference;
     try { preference = localStorage.getItem("collabio-theme"); } catch {}
-    var systemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     document.documentElement.dataset.theme =
-      preference === "light" || preference === "dark" ? preference : systemDark ? "dark" : "light";
+      preference === "light" || preference === "dark" ? preference : "dark";
   })();
 `;
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" data-theme="dark" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
       </head>
