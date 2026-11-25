@@ -69,3 +69,20 @@ Run `npm run typecheck`, `npm run lint`, and `npm run build` before deploying. V
 5. For each partner, go to **Import requests**, download the CSV template, and map the sheet to the template. Select **Sent** for your original requests and **Received** for the partner's original requests. Use the exact invited Google email. Preview the counts and flagged rows, confirm the import, and verify the requests in the partner workspace before sending an invitation. The import stores historical requests without triggering new request emails or review reminders. It can stage a pending account when the partner has one yet to activate.
 
 Use batches of up to 1,000 rows or 2 MB per CSV. Add a stable `source_id` when available to help identify repeat uploads. Keep original dates in ISO format and supply the original reason for rejected records. The importer flags ambiguous or invalid rows for review before saving.
+
+## Google sign-in popup and branding
+
+The homepage now checks the session and sends visitors to `/login` or `/dashboard`. The Google button opens an account chooser in a separate window. The workspace opens in the original window after sign-in. When a browser blocks the popup, Collabio opens the sign-in flow in the current tab.
+
+### Use the official Google button and show the Collabio name
+
+1. Open the Google Cloud project for the **same Web application OAuth client** configured in Supabase's Google provider. Under **Google Auth Platform → Branding**, set the app name to **Collabio**, complete the domain and brand setup, and submit for verification if required for your external production app.
+2. Under that OAuth client's **Authorized JavaScript origins**, add `https://collabio.online` and `https://www.collabio.online` if both hosts serve the app. Add the exact preview origin when testing a Vercel Preview.
+3. Add `NEXT_PUBLIC_GOOGLE_CLIENT_ID` in Vercel with that Web OAuth client ID, ending in `.apps.googleusercontent.com`. Redeploy. The client ID is public. Keep the client secret in Supabase's Google provider settings.
+4. Keep the Supabase **Authentication → URL Configuration** allowlist aligned with the deployed origin. For the fallback sign-in flow, register the app's exact `/auth/callback` URL for each active hostname. Under the Google OAuth client, keep the Supabase provider callback URL in **Authorized redirect URIs**.
+
+The official Google button sends a nonce-bound Google credential to Collabio, where Supabase verifies it. Google controls the name and account chooser. The fallback uses the Supabase OAuth redirect and may show its project hostname. To brand the fallback hostname too, configure a Supabase custom domain such as `auth.collabio.online` and register that domain's `/auth/v1/callback` with Google before activating it.
+
+### Check a dashboard server error
+
+Confirm migration `0008_partner_onboarding.sql` has already run once in the production Supabase project. The dashboard can render if the optional avatar or historical request column is absent. Imported requests, invitation activation and other features from migration 0008 still depend on that migration. If the dashboard error recurs, use the reference on the error screen to find the server exception in Vercel's runtime logs. Verify that the URL, anon key and service-role key in Vercel belong to the same Supabase project.

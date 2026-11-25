@@ -1,4 +1,5 @@
 import { AuthCard, AuthError } from "@/components/app/auth-card";
+import { googleErrors, isGoogleError } from "@/lib/google-sign-in";
 import { GoogleSignIn } from "@/components/app/google-sign-in";
 
 export default async function AcceptInvitationPage({
@@ -15,11 +16,7 @@ export default async function AcceptInvitationPage({
       {token ? (
         <GoogleSignIn
           token={token}
-          initialError={
-            error === "wrong_account"
-              ? "Choose the Google email address that received the invitation."
-              : undefined
-          }
+          initialError={isGoogleError(error) ? googleErrors[error] : undefined}
         />
       ) : (
         <AuthError>Open your invitation link to continue.</AuthError>

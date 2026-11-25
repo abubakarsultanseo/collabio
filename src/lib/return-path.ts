@@ -1,5 +1,6 @@
 export function returnPath(value: string | null | undefined) {
   if (
+    typeof value !== "string" ||
     !value ||
     !value.startsWith("/") ||
     value.startsWith("//") ||

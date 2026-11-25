@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { requireUser } from "@/server/auth";
 import { getProfile } from "@/server/profile";
+import { missingColumn } from "@/lib/supabase/schema-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 function formatDate(value: string) {
@@ -40,20 +41,34 @@ export default async function Dashboard() {
   if (partnershipError) throw new Error(partnershipError.message);
   const rows = partnerships ?? [];
   const ids = rows.map((row) => row.id);
+  const requestFields =
+    "id,partnership_id,sender_id,receiver_id,partner_id,status,anchor_text,placement_page_url,deadline_at,first_viewed_at,was_overdue,created_at,request_type";
+  async function loadRequests() {
+    if (!ids.length) return { data: [], error: null };
+    const result = await db
+      .from("requests")
+      .select(`${requestFields},import_key`)
+      .in("partnership_id", ids)
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (!missingColumn(result.error, "import_key")) return result;
+    const legacy = await db
+      .from("requests")
+      .select(requestFields)
+      .in("partnership_id", ids)
+      .order("created_at", { ascending: false })
+      .limit(200);
+    return {
+      data: legacy.data?.map((row) => ({ ...row, import_key: null })) ?? [],
+      error: legacy.error,
+    };
+  }
+
   const [
     { data: requests, error: requestsError },
     { count: activePartnerCount, error: countError },
   ] = await Promise.all([
-    ids.length
-      ? db
-          .from("requests")
-          .select(
-            "id,partnership_id,sender_id,receiver_id,partner_id,status,anchor_text,placement_page_url,deadline_at,first_viewed_at,was_overdue,created_at,request_type,import_key",
-          )
-          .in("partnership_id", ids)
-          .order("created_at", { ascending: false })
-          .limit(200)
-      : Promise.resolve({ data: [], error: null }),
+    loadRequests(),
     adminView
       ? db
           .from("profiles")
