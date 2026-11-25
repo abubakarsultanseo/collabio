@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { requestStatuses } from "@/lib/request-statuses";
 import {
   isDocumentRequest,
   originalAndEdited,
@@ -102,23 +103,7 @@ const rowSchema = z
       .optional()
       .transform((value) => value || null),
     type: z.preprocess(normalized, z.enum(requestTypes)),
-    status: z.preprocess(
-      normalized,
-      z.enum([
-        "new_request",
-        "seen",
-        "reviewing",
-        "accepted",
-        "rejected",
-        "in_progress",
-        "live",
-        "shared",
-        "hold",
-        "waiting_for_partner",
-        "cancelled",
-        "overdue",
-      ]),
-    ),
+    status: z.preprocess(normalized, z.enum(requestStatuses)),
     created: optionalDate.transform((value) => value ?? null),
     original_content: z
       .string()

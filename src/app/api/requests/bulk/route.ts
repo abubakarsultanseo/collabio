@@ -1,6 +1,7 @@
 import { after } from "next/server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { createRequestBatch, exchangeInput } from "@/lib/exchange-input";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -10,10 +11,12 @@ import {
 } from "@/lib/request-input";
 import { sendCollabEmail } from "@/lib/email-notifications";
 
-const itemSchema = contentInput.superRefine((item, context) => {
-  const issue = validateContent(item, false);
-  if (issue) context.addIssue({ code: "custom", message: issue });
-});
+const itemSchema = contentInput
+  .extend(exchangeInput)
+  .superRefine((item, context) => {
+    const issue = validateContent(item, false);
+    if (issue) context.addIssue({ code: "custom", message: issue });
+  });
 const schema = z.object({
   partnershipId: z.string().uuid(),
   requests: z.array(itemSchema).min(1).max(50),
@@ -95,24 +98,29 @@ export async function POST(request: Request) {
           { status: 403 },
         );
     }
-    const linkSide = pair.user_a_id === user.id ? "a" : "b";
+    if (![pair.user_a_id, pair.user_b_id].includes(user.id))
+      return NextResponse.json(
+        { error: "Workspace access denied." },
+        { status: 403 },
+      );
     const direction =
       profile.role === "admin" ? "admin_to_partner" : "partner_to_admin";
     const payload = parsed.data.requests.map((item) => ({
       partnership_id: pair.id,
-      deal_id: null,
-      link_side: linkSide,
+      deal_id: item.dealId ?? null,
+      exchange_ratio: item.exchangeRatio,
       partner_id: partner.id,
       sender_id: user.id,
       receiver_id: receiverId,
       direction,
       ...contentColumns(item),
-      status: "new_request",
     }));
-    const { data: created, error: createError } = await db
-      .from("requests")
-      .insert(payload)
-      .select("id,request_code,deadline_at,anchor_text");
+    const { rows: created, error: createError } = await createRequestBatch(
+      db,
+      payload,
+    );
+    if (createError?.message.startsWith("Choose an open exchange"))
+      return NextResponse.json({ error: createError.message }, { status: 409 });
     if (createError) throw createError;
     after(async () => {
       await Promise.all(

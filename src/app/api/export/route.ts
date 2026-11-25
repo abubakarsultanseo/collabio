@@ -32,6 +32,7 @@ export async function GET(request: Request) {
       );
     const params = new URL(request.url).searchParams;
     const scope = params.get("scope");
+    const view = params.get("view");
     const status = params.get("status");
     const requestType = params.get("type");
     const direction = params.get("direction");
@@ -116,14 +117,21 @@ export async function GET(request: Request) {
     let query = db
       .from("requests")
       .select(
-        "request_code,status,direction,sender_id,receiver_id,placement_page_url,anchor_text,target_link,request_type,instructions,notes,created_at,first_viewed_at,deadline_at,partnership_id,was_overdue,import_date_unknown,original_content,edited_content,document_url,listicle_position,attachment_name",
+        "request_code:partner_request_number,status,direction,sender_id,receiver_id,placement_page_url,anchor_text,target_link,request_type,instructions,notes,created_at,first_viewed_at,deadline_at,partnership_id,was_overdue,import_date_unknown,original_content,edited_content,document_url,listicle_position,attachment_name",
       )
       .in("partnership_id", ids)
       .order("created_at", { ascending: false });
     if (scope === "inbox") query = query.eq("receiver_id", user.id);
     if (scope === "sent") query = query.eq("sender_id", user.id);
-    if (scope === "pending")
-      query = query.not("status", "in", "(live,rejected,cancelled)");
+    if (
+      (scope === "inbox" || scope === "sent" || !scope) &&
+      view === "cancelled"
+    )
+      query = query.eq("status", "cancelled");
+    else query = query.neq("status", "cancelled");
+    if (scope === "pending" || view === "pending")
+      query = query.neq("status", "live");
+    if (view === "live") query = query.eq("status", "live");
     if (scope === "overdue") query = query.eq("was_overdue", true);
     if (status) query = query.eq("status", status);
     if (requestType && requestTypes.some((type) => type === requestType))
@@ -149,7 +157,8 @@ export async function GET(request: Request) {
         `instructions.ilike.%${search}%`,
         `notes.ilike.%${search}%`,
       ];
-      if (/^\d+$/.test(search)) terms.push(`request_code.eq.${Number(search)}`);
+      if (/^\d{1,12}$/.test(search))
+        terms.push(`partner_request_number.eq.${Number(search)}`);
       query = query.or(terms.join(","));
     }
     const { data: rows, error: rowsError } = await query;

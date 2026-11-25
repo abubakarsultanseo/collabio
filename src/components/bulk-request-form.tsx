@@ -1,4 +1,6 @@
 "use client";
+import { ExchangeFields } from "@/components/requests/exchange-controls";
+import type { ExchangeOverview } from "@/lib/exchanges";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/app/toast";
 import { useRef, useState } from "react";
@@ -7,9 +9,13 @@ import { RequestContentFields } from "@/components/requests/request-content-fiel
 export default function BulkRequestForm({
   partnershipId,
   onComplete,
+  overview,
+  partnerName,
 }: {
   partnershipId: string;
   onComplete: (count: number) => void;
+  overview?: ExchangeOverview;
+  partnerName?: string;
 }) {
   const notify = useToast();
   const [items, setItems] = useState([0, 1]);
@@ -74,6 +80,7 @@ export default function BulkRequestForm({
           <legend className="px-1 text-sm font-semibold">
             Request {index + 1}
           </legend>
+          <ExchangeFields overview={overview} partnerName={partnerName} />
           <RequestContentFields allowUpload={false} />
           {items.length > 1 && (
             <button

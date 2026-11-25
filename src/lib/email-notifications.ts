@@ -33,7 +33,7 @@ export async function requestEmail(db: AdminDb, input: RequestEmail) {
     db
       .from("requests")
       .select(
-        "request_code,placement_page_url,anchor_text,request_type,listicle_position",
+        "request_code:partner_request_number,placement_page_url,anchor_text,request_type,listicle_position",
       )
       .eq("id", input.requestId)
       .maybeSingle(),

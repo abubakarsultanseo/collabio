@@ -35,12 +35,25 @@ import {
   placementDomain,
   RequestDetails,
 } from "@/components/requests/request-tools";
+import {
+  requestStatuses,
+  requestViews,
+  matchesRequestView,
+  type RequestView,
+} from "@/lib/request-statuses";
+import {
+  ExchangeBalance,
+  ExchangeFields,
+  useExchangeOverview,
+  refreshExchangeOverview,
+} from "@/components/requests/exchange-controls";
 import { cn } from "@/lib/utils";
 
 type Row = RequestContent & {
   id: string;
   request_code: number;
   partnership_id: string;
+  deal_id?: string | null;
   sender_id: string;
   receiver_id: string;
   partner_id: string;
@@ -61,21 +74,7 @@ type Row = RequestContent & {
   workspace: { name: string } | null;
 };
 type Cursor = { at: string; id: string };
-type Workspace = { id: string; name: string };
-const statuses = [
-  "new_request",
-  "seen",
-  "reviewing",
-  "accepted",
-  "rejected",
-  "in_progress",
-  "live",
-  "shared",
-  "hold",
-  "waiting_for_partner",
-  "cancelled",
-  "overdue",
-];
+type Workspace = { id: string; name: string; counterpart_name?: string };
 type Filters = {
   type: string;
   direction: string;
@@ -118,25 +117,53 @@ function displayDate(value: string) {
 function EditRequestForm({
   row,
   onSave,
+  onSaveExchange,
   disabled,
 }: {
   row: Row;
   onSave: (form: HTMLFormElement) => void;
+  onSaveExchange: (dealId: string) => void;
   disabled: boolean;
 }) {
+  const exchange = useExchangeOverview(row.partnership_id);
   return (
-    <form
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSave(event.currentTarget);
-      }}
-      className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-4 md:grid-cols-2"
-    >
-      <RequestContentFields row={row} />
-      <Button type="submit" disabled={disabled} className="md:col-span-2">
-        Save request
-      </Button>
-    </form>
+    <div className="space-y-3">
+      <form
+        className="grid gap-3 rounded-xl border border-[var(--border)] p-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSaveExchange(
+            String(new FormData(event.currentTarget).get("dealId") ?? ""),
+          );
+        }}
+      >
+        <ExchangeFields
+          edit
+          overview={exchange?.overview}
+          currentDealId={row.deal_id}
+        />
+        <Button
+          type="submit"
+          variant="outline"
+          disabled={disabled || !exchange?.overview}
+          className="justify-self-start"
+        >
+          Save linked exchange
+        </Button>
+      </form>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSave(event.currentTarget);
+        }}
+        className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-4 md:grid-cols-2"
+      >
+        <RequestContentFields row={row} />
+        <Button type="submit" disabled={disabled} className="md:col-span-2">
+          Save request
+        </Button>
+      </form>
+    </div>
   );
 }
 export default function RequestListWorkspace({
@@ -154,14 +181,20 @@ export default function RequestListWorkspace({
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
+  const directionList = scope === "inbox" || scope === "sent";
+  const [view, setView] = useState<RequestView>("all");
+  const [filters, setFilters] = useState<Filters>(emptyFilters);
+  const exchange = useExchangeOverview(
+    directionList ? filters.partnershipId : "",
+  );
   const matchingRows = rows.filter(
     (row) =>
+      (!filters.partnershipId ||
+        row.partnership_id === filters.partnershipId) &&
       (!status || row.status === status) &&
-      (scope !== "pending" ||
-        !["live", "rejected", "cancelled"].includes(row.status)),
+      matchesRequestView(row.status, scope === "pending" ? "pending" : view),
   );
   const { counts: unreadChats, openRequestChat } = useRequestChat(matchingRows);
-  const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [advanced, setAdvanced] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [editing, setEditing] = useState<Row | null>(null);
@@ -205,26 +238,28 @@ export default function RequestListWorkspace({
   function reset() {
     setSearch("");
     setStatus("");
+    setView("all");
     setFilters(emptyFilters);
   }
   useEffect(() => {
-    if (!advanced && !filters.partnershipId) return;
+    if (!directionList && !advanced && !filters.partnershipId) return;
     fetch("/api/partnerships", { cache: "no-store" })
       .then((r) => r.json())
       .then((data) => setWorkspaces(data.partnerships ?? []))
       .catch(() => {});
-  }, [advanced, filters.partnershipId]);
+  }, [advanced, directionList, filters.partnershipId]);
   const load = useCallback(
     async (cursor?: Cursor) => {
       const loadId = ++latestLoad.current;
       if (cursor) setPaging(true);
       else {
+        setLoading(true);
         setPaging(false);
         setNextPage(null);
         recentEdits.current.clear();
       }
       try {
-        const params = new URLSearchParams({ scope, paged: "1" });
+        const params = new URLSearchParams({ scope, view, paged: "1" });
         if (cursor) {
           params.set("beforeAt", cursor.at);
           params.set("beforeId", cursor.id);
@@ -268,7 +303,7 @@ export default function RequestListWorkspace({
         }
       }
     },
-    [scope, search, status, filters, notify],
+    [scope, search, status, view, filters, notify],
   );
   useEffect(() => {
     const changedSearch = previousSearch.current !== search;
@@ -391,6 +426,7 @@ export default function RequestListWorkspace({
       if (!response.ok)
         throw new Error(data.error ?? "Could not update request.");
       if (data.request) mergeRow(data.request);
+      refreshExchangeOverview();
       notify(body.status ? "Status saved." : "Request updated.");
       return true;
     } catch (caught) {
@@ -418,6 +454,7 @@ export default function RequestListWorkspace({
       if (!response.ok)
         throw new Error(data.error ?? "Could not delete request.");
       setDeleteTarget(null);
+      refreshExchangeOverview();
       notify(`Request #${row.request_code} deleted.`);
       recentEdits.current.set(row.id, null);
       setRows((current) => current.filter((item) => item.id !== row.id));
@@ -431,7 +468,7 @@ export default function RequestListWorkspace({
       mutation.current = false;
     }
   }
-  const exportQuery = new URLSearchParams({ scope, format: "xlsx" });
+  const exportQuery = new URLSearchParams({ scope, view, format: "xlsx" });
   if (status) exportQuery.set("status", status);
   if (search.trim()) exportQuery.set("q", search.trim());
   if (filters.type) exportQuery.set("type", filters.type);
@@ -444,11 +481,12 @@ export default function RequestListWorkspace({
     editing && (rows.find((row) => row.id === editing.id) ?? editing);
   const rowAction = "h-auto rounded-md px-2 py-1";
   const overdue = (row: Row) =>
-    row.was_overdue ||
-    row.status === "overdue" ||
-    (!row.import_key &&
-      new Date(row.deadline_at) < new Date() &&
-      !row.first_viewed_at);
+    !["live", "cancelled", "removed", "rejected"].includes(row.status) &&
+    (row.was_overdue ||
+      row.status === "overdue" ||
+      (!row.import_key &&
+        new Date(row.deadline_at) < new Date() &&
+        !row.first_viewed_at));
 
   function openRequest(row: Row) {
     setDetails({ row, mode: "view" });
@@ -587,14 +625,28 @@ export default function RequestListWorkspace({
             <Select
               className="mt-1 capitalize"
               value={status}
-              onChange={(event) => setStatus(event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                setStatus(value);
+                if (directionList && value === "cancelled")
+                  setView("cancelled");
+                else if (
+                  value &&
+                  ((view === "pending" && value === "live") ||
+                    (view === "live" && value !== "live") ||
+                    view === "cancelled")
+                )
+                  setView("all");
+              }}
             >
               <option value="">All statuses</option>
-              {statuses.map((item) => (
-                <option key={item} value={item}>
-                  {formatStatus(item)}
-                </option>
-              ))}
+              {requestStatuses
+                .filter((item) => directionList || item !== "cancelled")
+                .map((item) => (
+                  <option key={item} value={item}>
+                    {formatStatus(item)}
+                  </option>
+                ))}
             </Select>
           </label>
           <div className="flex flex-wrap gap-2 sm:col-span-2 xl:col-span-1">
@@ -710,6 +762,11 @@ export default function RequestListWorkspace({
                   onClick={() => {
                     setSearch(preset.search);
                     setStatus(preset.status);
+                    setView(
+                      directionList && preset.status === "cancelled"
+                        ? "cancelled"
+                        : "all",
+                    );
                     setFilters(preset.filters);
                     setAdvanced(Object.values(preset.filters).some(Boolean));
                   }}
@@ -734,6 +791,67 @@ export default function RequestListWorkspace({
         )}
       </section>
 
+      {directionList && (
+        <section
+          className="os-card space-y-3 p-4"
+          aria-label="Partner and request view"
+        >
+          <div
+            className="flex flex-wrap items-center gap-2"
+            role="group"
+            aria-label="Filter by partner"
+          >
+            {[{ id: "", name: "All partners" }, ...workspaces].map((party) => (
+              <Button
+                key={party.id}
+                type="button"
+                size="sm"
+                aria-pressed={filters.partnershipId === party.id}
+                variant={
+                  filters.partnershipId === party.id ? "default" : "outline"
+                }
+                onClick={() =>
+                  setFilters((current) => ({
+                    ...current,
+                    partnershipId: party.id,
+                  }))
+                }
+              >
+                {party.counterpart_name ?? party.name}
+              </Button>
+            ))}
+          </div>
+          <div
+            className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-3"
+            role="group"
+            aria-label="Request status groups"
+          >
+            {requestViews.map((option) => (
+              <Button
+                type="button"
+                key={option.value}
+                size="sm"
+                aria-pressed={view === option.value}
+                variant={view === option.value ? "default" : "outline"}
+                onClick={() => {
+                  setView(option.value);
+                  setStatus("");
+                }}
+              >
+                {option.label}
+              </Button>
+            ))}
+          </div>
+        </section>
+      )}
+      {directionList && filters.partnershipId && (
+        <ExchangeBalance
+          overview={exchange?.overview}
+          error={exchange?.error}
+          showExchanges
+        />
+      )}
+
       {loading ? (
         <p role="status" className="os-card p-5 text-sm text-[var(--muted)]">
           Loading requests…
@@ -746,10 +864,12 @@ export default function RequestListWorkspace({
         />
       ) : (
         <section className="space-y-2" aria-label="Request results">
-          <p className="text-xs text-[var(--muted)]">
-            Showing {matchingRows.length} request
-            {matchingRows.length === 1 ? "" : "s"}
-          </p>
+          {view !== "cancelled" && (
+            <p className="text-xs text-[var(--muted)]">
+              Showing {matchingRows.length} request
+              {matchingRows.length === 1 ? "" : "s"}
+            </p>
+          )}
           <div
             tabIndex={0}
             role="region"
@@ -931,6 +1051,11 @@ export default function RequestListWorkspace({
             <EditRequestForm
               key={activeRow.id}
               row={activeRow}
+              onSaveExchange={(dealId) => {
+                void update(activeRow, { dealId }).then((ok) => {
+                  if (ok) setEditing(null);
+                });
+              }}
               disabled={busy !== null}
               onSave={(form) => {
                 void update(activeRow, {}, form).then((ok) => {

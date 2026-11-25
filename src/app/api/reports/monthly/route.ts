@@ -80,6 +80,7 @@ export async function GET(request: Request) {
       )
       .in("partnership_id", ids)
       .eq("import_date_unknown", false)
+      .neq("status", "cancelled")
       .gte("created_at", start.toISOString())
       .lt("created_at", end.toISOString())
       .order("created_at");

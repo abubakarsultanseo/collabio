@@ -8,6 +8,7 @@ import {
   requestLabel,
   type RequestContent,
 } from "@/lib/request-content";
+import { requestStatuses } from "@/lib/request-statuses";
 import { Copy } from "lucide-react";
 import { useToast } from "@/components/app/toast";
 import { StatusBadge, formatStatus } from "@/components/status-badge";
@@ -15,21 +16,6 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-
-const statuses = [
-  "new_request",
-  "seen",
-  "reviewing",
-  "accepted",
-  "rejected",
-  "in_progress",
-  "live",
-  "shared",
-  "hold",
-  "waiting_for_partner",
-  "cancelled",
-  "overdue",
-];
 
 export function placementDomain(url: string) {
   try {
@@ -102,7 +88,7 @@ export function InlineStatus({
           else void save(value);
         }}
       >
-        {statuses.map((value) => (
+        {requestStatuses.map((value) => (
           <option key={value} value={value}>
             {formatStatus(value)}
           </option>

@@ -25,6 +25,13 @@ import {
   Send,
   type LucideIcon,
 } from "lucide-react";
+import {
+  ExchangeBalance,
+  ExchangeFields,
+  useExchangeOverview,
+  refreshExchangeOverview,
+} from "@/components/requests/exchange-controls";
+import { matchesRequestView, type RequestView } from "@/lib/request-statuses";
 import BulkRequestForm from "@/components/bulk-request-form";
 
 type RequestRow = RequestContent & {
@@ -67,14 +74,21 @@ export default function PartnershipDetail({
   } | null>(null);
   const [requests, setRequests] = useState<RequestRow[]>([]);
   const [busy, setBusy] = useState(false);
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useState<RequestView | "sent" | "received">(
+    "all",
+  );
+  const exchange = useExchangeOverview(id);
   const [bulkMode, setBulkMode] = useState(false);
   const [formVersion, setFormVersion] = useState(0);
-  const incoming = requests.filter((row) => row.receiver_id === currentUserId);
-  const outgoing = requests.filter((row) => row.sender_id === currentUserId);
+  const incoming = requests.filter(
+    (row) => row.status !== "cancelled" && row.receiver_id === currentUserId,
+  );
+  const outgoing = requests.filter(
+    (row) => row.status !== "cancelled" && row.sender_id === currentUserId,
+  );
   const live = requests.filter((row) => row.status === "live");
-  const pending = requests.filter(
-    (row) => !["live", "rejected", "cancelled"].includes(row.status),
+  const pending = requests.filter((row) =>
+    matchesRequestView(row.status, "pending"),
   );
   const metrics: Array<{ label: string; value: number; icon: LucideIcon }> = [
     { label: "Requests sent by you", value: outgoing.length, icon: Send },
@@ -85,15 +99,11 @@ export default function PartnershipDetail({
   const shown = useMemo(
     () =>
       requests.filter((row) =>
-        filter === "all"
-          ? true
-          : filter === "sent"
-            ? row.sender_id === currentUserId
-            : filter === "received"
-              ? row.receiver_id === currentUserId
-              : filter === "live"
-                ? row.status === "live"
-                : !["live", "rejected", "cancelled"].includes(row.status),
+        filter === "sent"
+          ? row.status !== "cancelled" && row.sender_id === currentUserId
+          : filter === "received"
+            ? row.status !== "cancelled" && row.receiver_id === currentUserId
+            : matchesRequestView(row.status, filter),
       ),
     [requests, filter, currentUserId],
   );
@@ -118,9 +128,12 @@ export default function PartnershipDetail({
       window.removeEventListener("collabio:request-updated", onUpdate);
   }, [mergeRow]);
   const load = useCallback(async () => {
-    const response = await fetch(`/api/requests?partnershipId=${id}`, {
-      cache: "no-store",
-    });
+    const response = await fetch(
+      `/api/requests?partnershipId=${id}&view=workspace`,
+      {
+        cache: "no-store",
+      },
+    );
     const data = await response.json();
     if (!response.ok)
       throw new Error(data.error ?? "Could not load workspace requests.");
@@ -144,6 +157,7 @@ export default function PartnershipDetail({
       if (!response.ok)
         throw new Error(data.error ?? "Could not send request.");
       setFormVersion((version) => version + 1);
+      refreshExchangeOverview();
       notify(
         `Request #${data.request_code} sent. The receiver has 24 hours to review it.`,
         "success",
@@ -169,6 +183,7 @@ export default function PartnershipDetail({
       if (!response.ok)
         throw new Error(data.error ?? "Could not update request status.");
       if (data.request) mergeRow(data.request);
+      refreshExchangeOverview();
       notify("Status saved.");
       return true;
     } catch (caught) {
@@ -272,11 +287,14 @@ export default function PartnershipDetail({
           <div className="mt-4">
             <BulkRequestForm
               partnershipId={id}
+              overview={exchange?.overview}
+              partnerName={name}
               onComplete={(count) => {
                 notify(
                   `${count} requests sent. The receiver has 24 hours to review each request.`,
                   "success",
                 );
+                refreshExchangeOverview();
                 void load();
               }}
             />
@@ -287,6 +305,7 @@ export default function PartnershipDetail({
             onSubmit={submit}
             className="mt-4 grid gap-3 md:grid-cols-2"
           >
+            <ExchangeFields overview={exchange?.overview} partnerName={name} />
             <RequestContentFields />
             <Button disabled={busy} className="md:col-span-2">
               {busy ? "Sending…" : "Send request"}
@@ -294,6 +313,11 @@ export default function PartnershipDetail({
           </form>
         )}
       </section>
+      <ExchangeBalance
+        overview={exchange?.overview}
+        error={exchange?.error}
+        showExchanges
+      />
       <section>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -310,10 +334,11 @@ export default function PartnershipDetail({
             ["received", "Received"],
             ["live", "Live placements"],
             ["pending", "Pending"],
+            ["cancelled", "Cancelled"],
           ].map(([key, label]) => (
             <button
               key={key}
-              onClick={() => setFilter(key)}
+              onClick={() => setFilter(key as typeof filter)}
               className={`shrink-0 rounded-full border px-3 py-1.5 text-sm ${filter === key ? "border-[var(--brand)] bg-[var(--brand)] text-white dark:text-[var(--canvas)]" : "border-[var(--border)] bg-[var(--card)] text-[var(--text)]"}`}
             >
               {label}
@@ -351,9 +376,7 @@ export default function PartnershipDetail({
                           })}
                     </p>
                   </div>
-                  <StatusBadge
-                    status={row.was_overdue ? "overdue" : row.status}
-                  />
+                  <StatusBadge status={row.status} />
                 </div>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t pt-3">
                   <span className="text-[var(--muted)] text-xs">

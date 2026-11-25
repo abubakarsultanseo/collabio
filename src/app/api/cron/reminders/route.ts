@@ -39,7 +39,11 @@ export async function GET(request: Request) {
         .eq("id", job.request_id)
         .maybeSingle();
       if (requestError) throw requestError;
-      if (row && !row.first_viewed_at) {
+      if (
+        row &&
+        !row.first_viewed_at &&
+        !["live", "cancelled", "removed", "rejected"].includes(row.status)
+      ) {
         const isOverdue = job.job_type === "24_hour_overdue";
         if (isOverdue) {
           const { error: updateError } = await db
@@ -51,6 +55,7 @@ export async function GET(request: Request) {
               last_updated_by: row.sender_id,
             })
             .eq("id", row.id)
+            .eq("status", row.status)
             .is("first_viewed_at", null);
           if (updateError) throw updateError;
         }

@@ -1,5 +1,7 @@
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
+import { createRequestBatch, exchangeInput } from "@/lib/exchange-input";
+import { requestStatuses } from "@/lib/request-statuses";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requestTypes, isDocumentRequest } from "@/lib/request-content";
@@ -18,28 +20,14 @@ import { sendCollabEmail } from "@/lib/email-notifications";
 
 const requestSchema = contentInput.extend({
   partnershipId: z.string().uuid(),
-  dealId: z.string().uuid().optional(),
+  ...exchangeInput,
 });
 const patchSchema = z
   .object({
     ...contentInput.partial().shape,
     id: z.string().uuid(),
-    status: z
-      .enum([
-        "new_request",
-        "seen",
-        "reviewing",
-        "accepted",
-        "rejected",
-        "in_progress",
-        "live",
-        "shared",
-        "hold",
-        "waiting_for_partner",
-        "cancelled",
-        "overdue",
-      ])
-      .optional(),
+    status: z.enum(requestStatuses).optional(),
+    dealId: exchangeInput.dealId,
     markSeen: z.boolean().optional(),
     reason: z.string().trim().min(1).max(2000).optional(),
   })
@@ -110,6 +98,7 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const partnershipId = url.searchParams.get("partnershipId");
     const scope = url.searchParams.get("scope");
+    const view = url.searchParams.get("view");
     const paged = url.searchParams.get("paged") === "1";
     const pageSize = 60;
     const beforeAt = url.searchParams.get("beforeAt");
@@ -165,7 +154,7 @@ export async function GET(request: Request) {
     let query = db
       .from("requests")
       .select(
-        "id,request_code,partnership_id,deal_id,link_side,partner_id,sender_id,receiver_id,direction,placement_page_url,anchor_text,target_link,request_type,instructions,notes,status,first_viewed_at,deadline_at,was_overdue,overdue_at,completed_at,created_at,updated_at,shared_at,live_at,rejection_reason,import_key,original_content,edited_content,document_url,listicle_position,attachment_name,import_date_unknown",
+        "id,request_code:partner_request_number,partnership_id,deal_id,link_side,partner_id,sender_id,receiver_id,direction,placement_page_url,anchor_text,target_link,request_type,instructions,notes,status,first_viewed_at,deadline_at,was_overdue,overdue_at,completed_at,created_at,updated_at,shared_at,live_at,rejection_reason,import_key,original_content,edited_content,document_url,listicle_position,attachment_name,import_date_unknown",
       )
       .in("partnership_id", ids)
       .order("created_at", { ascending: false })
@@ -177,8 +166,18 @@ export async function GET(request: Request) {
     if (requestId) query = query.eq("id", requestId);
     if (scope === "inbox") query = query.eq("receiver_id", current.user.id);
     if (scope === "sent") query = query.eq("sender_id", current.user.id);
-    if (scope === "pending")
-      query = query.not("status", "in", "(live,rejected,cancelled)");
+    if (!requestId) {
+      if (
+        (scope === "inbox" || scope === "sent" || !scope) &&
+        view === "cancelled"
+      )
+        query = query.eq("status", "cancelled");
+      else if (scope || !partnershipId || view !== "workspace")
+        query = query.neq("status", "cancelled");
+    }
+    if (scope === "pending" || view === "pending")
+      query = query.neq("status", "live");
+    if (view === "live") query = query.eq("status", "live");
     if (scope === "overdue") query = query.eq("was_overdue", true);
     if (status) query = query.eq("status", status);
     if (partnershipId) query = query.eq("partnership_id", partnershipId);
@@ -208,7 +207,8 @@ export async function GET(request: Request) {
         `original_content.ilike.%${search}%`,
         `edited_content.ilike.%${search}%`,
       ];
-      if (/^\d+$/.test(search)) terms.push(`request_code.eq.${Number(search)}`);
+      if (/^\d{1,12}$/.test(search))
+        terms.push(`partner_request_number.eq.${Number(search)}`);
       query = query.or(terms.join(","));
     }
     const { data, error } = await query.limit(
@@ -346,48 +346,35 @@ export async function POST(request: Request) {
           { status: 403 },
         );
     }
-    if (input.dealId) {
-      const { data: deal, error: dealError } = await db
-        .from("deals")
-        .select("id,status")
-        .eq("id", input.dealId)
-        .eq("partnership_id", input.partnershipId)
-        .maybeSingle();
-      if (dealError) throw dealError;
-      if (!deal || deal.status !== "open")
-        return NextResponse.json(
-          { error: "Choose an open deal in this workspace." },
-          { status: 400 },
-        );
-    }
-    const senderSide = pair.user_a_id === current.user.id ? "a" : "b";
     const direction =
       current.role === "admin" ? "admin_to_partner" : "partner_to_admin";
     const attachment = file
       ? await uploadRequestAttachment(db, input.partnershipId, file)
       : null;
-    const { data: created, error } = await db
-      .from("requests")
-      .insert({
+    const {
+      rows: [created],
+      error,
+    } = await createRequestBatch(db, [
+      {
         partnership_id: input.partnershipId,
         deal_id: input.dealId ?? null,
-        link_side: senderSide,
+        exchange_ratio: input.exchangeRatio,
         partner_id: partner.id,
         sender_id: current.user.id,
         receiver_id: receiverId,
         direction,
         ...contentColumns(input),
         ...attachment,
-        status: "new_request",
-      })
-      .select("id,request_code,deadline_at")
-      .single();
-    if (error) {
+      },
+    ]);
+    if (error || !created) {
       if (attachment)
         await db.storage
           .from(requestAttachmentBucket)
           .remove([attachment.attachment_path]);
-      throw error;
+      if (error?.message.startsWith("Choose an open exchange"))
+        return NextResponse.json({ error: error.message }, { status: 409 });
+      throw error ?? new Error("Could not create request.");
     }
     after(async () => {
       await sendCollabEmail(db, {
@@ -453,7 +440,8 @@ export async function PATCH(request: Request) {
         { status: 403 },
       );
     if (markSeen) {
-      if (row.import_key) return NextResponse.json({ success: true });
+      if (row.import_key || row.status === "cancelled")
+        return NextResponse.json({ success: true });
       if (current.role !== "admin") {
         const { data: allowed, error } = await current.auth
           .from("requests")
@@ -502,6 +490,9 @@ export async function PATCH(request: Request) {
     const isStatus = changes.status !== undefined;
     const edits =
       !!file || Object.keys(changes).some((key) => key !== "status");
+    const editsContent =
+      !!file ||
+      Object.keys(changes).some((key) => key !== "status" && key !== "dealId");
     if (current.role !== "admin") {
       if (edits)
         return NextResponse.json(
@@ -539,7 +530,24 @@ export async function PATCH(request: Request) {
     }
     let attachment: Awaited<ReturnType<typeof uploadRequestAttachment>> | null =
       null;
-    if (edits) {
+    if (changes.dealId !== undefined && changes.dealId !== row.deal_id) {
+      if (changes.dealId) {
+        const { data: deal, error: dealError } = await db
+          .from("deals")
+          .select("id,status,first_link_side")
+          .eq("id", changes.dealId)
+          .eq("partnership_id", row.partnership_id)
+          .maybeSingle();
+        if (dealError) throw dealError;
+        if (!deal || deal.status !== "open" || !deal.first_link_side)
+          return NextResponse.json(
+            { error: "Choose an open exchange in this workspace." },
+            { status: 409 },
+          );
+      }
+      update.deal_id = changes.dealId;
+    }
+    if (editsContent) {
       const saved = contentInput.safeParse({
         placementPageUrl: row.placement_page_url,
         anchorText: row.anchor_text,
@@ -583,7 +591,7 @@ export async function PATCH(request: Request) {
       edits ? write.eq("updated_at", row.updated_at) : write
     )
       .select(
-        "id,status,first_viewed_at,updated_at,placement_page_url,anchor_text,target_link,request_type,instructions,notes,live_at,shared_at,was_overdue,rejection_reason,original_content,edited_content,document_url,listicle_position,attachment_name",
+        "id,status,first_viewed_at,updated_at,placement_page_url,anchor_text,target_link,request_type,instructions,notes,live_at,shared_at,was_overdue,rejection_reason,original_content,edited_content,document_url,listicle_position,attachment_name,deal_id",
       )
       .maybeSingle();
     if (updateError || !updated) {
@@ -601,7 +609,7 @@ export async function PATCH(request: Request) {
       );
     }
     if (
-      edits &&
+      editsContent &&
       row.attachment_path &&
       update.attachment_path !== row.attachment_path
     )

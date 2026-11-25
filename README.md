@@ -98,3 +98,12 @@ Confirm migration `0008_partner_onboarding.sql` has already run once in the prod
 5. Use the original URLs and verify document links. If a Google Sheets chip exports only its title, add the actual link in a **Document URL** column. Set **Request Type** to **Guest post** or **Listicle** for document rows, and add **Listicle Position** where applicable. Leave unavailable historical dates empty. Check the preview before confirming. Existing imported rows are deduplicated, and confirming a historical import starts no new notification or review timer.
 
 Sheet status translations used by the two native layouts include Requested and New Req → New Request, In Process → In Progress, and Not Live and Want to remove → Hold. The last two labels stay in the request notes. Rejected rows require their source reason. The importer does not change Google Docs sharing permissions.
+
+## Partner request views and exchange slots
+
+Apply `supabase/migrations/0010_partner_request_exchanges.sql` after 0009 and before deploying this build. It adds the Removed status, fills in independent request numbers for each partner workspace and enables exchange balances. Existing request UUIDs are preserved.
+
+- In **Sent Requests** or **Received Requests**, select a partner under the filters. **Pending** includes Hold, Removed and Rejected requests. Cancelled requests are listed under **Cancelled** and are excluded from request totals and fulfilment.
+- In a partner workspace, start a new exchange when creating a request or select an existing open exchange. The ratio is shown as **links you give : links the partner gives**. The smaller commitment publishes first. For 1:1, the recipient of the opening request publishes first. The return slots become due after the first publisher has a Live placement. Only Live placements fill slots.
+- To add an existing request to a tracked exchange, an admin can open **Sent Requests** or **Received Requests**, click **Edit**, select the exchange and click **Save linked exchange**. Historical Live requests count in the given and received totals. They affect an exchange only when linked to it.
+- Verify the updated invitation in a preview using a test invite. It uses the same Collabio email design and includes the sender, the partner's name and the Accept Invitation button.

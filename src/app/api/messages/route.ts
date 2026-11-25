@@ -65,7 +65,7 @@ export async function GET() {
     const { data: requests, error: requestError } = await db
       .from("requests")
       .select(
-        "id,request_code,partnership_id,anchor_text,sender_id,receiver_id,status,deadline_at",
+        "id,request_code:partner_request_number,partnership_id,anchor_text,sender_id,receiver_id,status,deadline_at",
       )
       .in("partnership_id", ids);
     if (requestError) throw requestError;

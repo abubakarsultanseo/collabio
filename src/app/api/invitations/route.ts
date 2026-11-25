@@ -19,7 +19,7 @@ export async function POST(request: Request) {
       );
     const { data: profile, error: profileError } = await auth
       .from("profiles")
-      .select("role,account_status")
+      .select("role,account_status,full_name")
       .eq("id", user.id)
       .maybeSingle();
     if (profileError) throw profileError;
@@ -119,9 +119,9 @@ export async function POST(request: Request) {
       ...renderCollabioEmail({
         title: "You're invited to Collabio",
         recipient: input.name,
-        message: `Accept your invitation using this Google email address. Your invitation is valid for ${hours} hours.`,
+        message: `${profile.full_name || "A Collabio admin"} invited you to collaborate on Collabio. Accept your invitation using this Google email address. Your invitation is valid for ${hours} hours.`,
         href: link,
-        action: "Accept invitation",
+        action: "Accept Invitation",
       }),
     });
     if (sent.error) {

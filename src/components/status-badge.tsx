@@ -12,6 +12,7 @@ const statusTones: Record<string, string> = {
   hold: "warning",
   rejected: "danger",
   cancelled: "danger",
+  removed: "warning",
   overdue: "danger",
 };
 

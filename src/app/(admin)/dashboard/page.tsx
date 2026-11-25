@@ -48,13 +48,17 @@ export default async function Dashboard() {
     if (!ids.length) return { data: [], error: null };
     const result = await db
       .from("requests")
-      .select(`${requestFields},import_key,import_date_unknown`)
+      .select(
+        `${requestFields},import_key,import_date_unknown,partner_request_number`,
+      )
       .in("partnership_id", ids)
+      .neq("status", "cancelled")
       .order("created_at", { ascending: false })
       .limit(200);
     if (
       !missingColumn(result.error, "import_key") &&
-      !missingColumn(result.error, "import_date_unknown")
+      !missingColumn(result.error, "import_date_unknown") &&
+      !missingColumn(result.error, "partner_request_number")
     )
       return result;
     const legacyQuery = db.from("requests");
@@ -64,6 +68,7 @@ export default async function Dashboard() {
         : legacyQuery.select(`${requestFields},import_key`)
     )
       .in("partnership_id", ids)
+      .neq("status", "cancelled")
       .order("created_at", { ascending: false })
       .limit(200);
     return {
@@ -71,7 +76,9 @@ export default async function Dashboard() {
         legacy.data?.map((row) => ({
           ...row,
           import_key: "import_key" in row ? row.import_key : null,
-          import_date_unknown: false,
+          import_date_unknown:
+            "import_date_unknown" in row ? row.import_date_unknown : false,
+          partner_request_number: null,
         })) ?? [],
       error: legacy.error,
     };
@@ -92,7 +99,7 @@ export default async function Dashboard() {
   ]);
   if (requestsError) throw new Error(requestsError.message);
   if (countError) throw new Error(countError.message);
-  const all = requests ?? [];
+  const all = (requests ?? []).filter((row) => row.status !== "cancelled");
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const receivedToday = all.filter(
@@ -346,6 +353,9 @@ export default async function Dashboard() {
                             title={anchor}
                             className="block max-w-56 truncate font-semibold text-[var(--brand-dark)]"
                           >
+                            {row.partner_request_number
+                              ? `#${row.partner_request_number} · `
+                              : ""}
                             {anchor}
                           </Link>
                           <time
