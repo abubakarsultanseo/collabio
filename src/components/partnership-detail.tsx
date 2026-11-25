@@ -1,16 +1,14 @@
 "use client";
 import { useRequestChat } from "@/components/chat/use-request-chat";
-import {
-  InlineStatus,
-  placementDomain,
-} from "@/components/requests/request-tools";
+import { InlineStatus } from "@/components/requests/request-tools";
+import { RequestRowSummary } from "@/components/requests/request-row-summary";
 import RequestDetails from "@/components/requests/request-details-panel";
 import { EmptyState } from "@/components/app/empty-state";
 import {
   RequestContentFields,
   requestFormBody,
 } from "@/components/requests/request-content-fields";
-import { requestLabel, type RequestContent } from "@/lib/request-content";
+import { type RequestContent } from "@/lib/request-content";
 import { Button } from "@/components/ui/button";
 
 import { useToast } from "@/components/app/toast";
@@ -363,14 +361,11 @@ export default function PartnershipDetail({
             {shown.map((row) => (
               <article key={row.id} className="os-card p-4 md:p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h3 className="font-semibold">
-                      #{row.request_code} ·{" "}
-                      {placementDomain(row.placement_page_url)}
-                    </h3>
-                    <p className="text-sm text-[var(--muted)]">
-                      {requestLabel(row)}
-                    </p>
+                  <div className="min-w-0 max-w-full">
+                    <RequestRowSummary
+                      row={row}
+                      className="max-w-[24rem] text-sm"
+                    />
                     <p className="text-[var(--muted)] mt-1 text-xs">
                       {row.sender_id === currentUserId
                         ? "Sent by you"
@@ -392,19 +387,6 @@ export default function PartnershipDetail({
                       : `Review by ${new Date(row.deadline_at).toLocaleString("en-PK", { timeZone: "Asia/Karachi" })}`}
                   </span>
                   <div className="flex items-center gap-3">
-                    {row.status === "live" && row.live_url && (
-                      <a
-                        href={row.live_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className={buttonVariants({
-                          variant: "outline",
-                          size: "sm",
-                        })}
-                      >
-                        Published link <ArrowUpRight size={14} aria-hidden />
-                      </a>
-                    )}
                     <Button
                       type="button"
                       variant="outline"

@@ -9,7 +9,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRequestChat } from "@/components/chat/use-request-chat";
 import {
   Eye,
-  ArrowUpRight,
   StickyNote,
   FileSpreadsheet,
   Inbox,
@@ -46,6 +45,7 @@ import {
   useExchangeOverview,
   refreshExchangeOverview,
 } from "@/components/requests/exchange-controls";
+import { RequestRowSummary } from "@/components/requests/request-row-summary";
 import { cn } from "@/lib/utils";
 
 import {
@@ -684,16 +684,6 @@ export default function RequestListWorkspace({
             update(row, { status, reason, liveUrl })
           }
         />
-        {row.status === "live" && row.live_url && (
-          <a
-            href={row.live_url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 text-xs font-medium text-[var(--brand-dark)] hover:underline"
-          >
-            Published link <ArrowUpRight size={13} aria-hidden />
-          </a>
-        )}
         {overdue(row) && row.status !== "overdue" && (
           <span className="ml-1">
             <StatusBadge status="overdue" />
@@ -1092,19 +1082,10 @@ export default function RequestListWorkspace({
                       )}
                     >
                       <td className="col-span-2 min-w-0 px-4 py-3">
-                        <div
-                          className="max-w-60 truncate font-semibold"
-                          title={placementDomain(row.placement_page_url)}
-                        >
-                          #{row.request_code} ·{" "}
-                          {placementDomain(row.placement_page_url)}
-                        </div>
-                        <div
-                          className="max-w-60 truncate text-xs text-[var(--muted)]"
-                          title={requestLabel(row)}
-                        >
-                          {requestLabel(row)}
-                        </div>
+                        <RequestRowSummary
+                          row={row}
+                          className="max-w-[24rem]"
+                        />
                         <p className="mt-1 text-xs text-[var(--muted)] md:hidden">
                           {counterpart} · {formatStatus(row.request_type)}
                         </p>
