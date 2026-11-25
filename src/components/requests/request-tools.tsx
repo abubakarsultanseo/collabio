@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { requestStatuses } from "@/lib/request-statuses";
 import { ChevronDown } from "lucide-react";
 import { StatusBadge, formatStatus } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import * as Menu from "@radix-ui/react-dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 export function placementDomain(url: string) {
@@ -21,27 +22,47 @@ export function InlineStatus({
   status,
   enabled,
   busy,
+  guestPost,
+  liveUrl,
   onSave,
 }: {
   status: string;
   enabled?: boolean;
   busy?: boolean;
-  onSave: (status: string, reason?: string) => Promise<boolean>;
+  guestPost?: boolean;
+  liveUrl?: string | null;
+  onSave: (
+    status: string,
+    reason?: string,
+    liveUrl?: string,
+  ) => Promise<boolean>;
 }) {
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishedUrl, setPublishedUrl] = useState("");
+  const publishedInput = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState<string | null>(null);
 
-  async function save(value: string, why?: string) {
+  async function save(value: string, why?: string, url?: string) {
     setSaving(value);
     try {
-      if (await onSave(value, why)) {
+      if (await onSave(value, why, url)) {
         setRejecting(false);
+        setPublishOpen(false);
         setReason("");
       }
     } finally {
       setSaving(null);
     }
+  }
+
+  function selectStatus(value: string) {
+    if (value === "rejected") setRejecting(true);
+    else if (value === "live" && guestPost) {
+      setPublishedUrl(liveUrl ?? "");
+      setPublishOpen(true);
+    } else void save(value);
   }
 
   if (!enabled) return <StatusBadge status={status} />;
@@ -70,13 +91,17 @@ export function InlineStatus({
             {requestStatuses.map((value) => (
               <Menu.Item
                 key={value}
-                disabled={value === status}
+                disabled={value === status && !(guestPost && value === "live")}
                 className="cursor-pointer rounded p-1 outline-none data-[highlighted]:bg-[var(--canvas)] data-[disabled]:opacity-50"
-                onSelect={() =>
-                  value === "rejected" ? setRejecting(true) : void save(value)
-                }
+                onSelect={() => selectStatus(value)}
               >
-                <StatusBadge status={value} />
+                {guestPost && value === "live" && status === "live" ? (
+                  <span className="px-2 text-xs">
+                    {liveUrl ? "Edit published link" : "Add published link"}
+                  </span>
+                ) : (
+                  <StatusBadge status={value} />
+                )}
               </Menu.Item>
             ))}
           </Menu.Content>
@@ -87,6 +112,53 @@ export function InlineStatus({
           Saving status
         </span>
       )}
+      <Dialog
+        open={publishOpen}
+        onOpenChange={(open) => {
+          if (!saving) setPublishOpen(open);
+        }}
+      >
+        <DialogContent
+          title={
+            status === "live" ? "Published guest post" : "Mark guest post Live"
+          }
+          description="Enter the URL of the published article for this link."
+          initialFocus={publishedInput}
+          closeDisabled={!!saving}
+        >
+          <form
+            className="space-y-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (publishedUrl.trim())
+                void save("live", undefined, publishedUrl.trim());
+            }}
+          >
+            <label className="block text-sm font-medium">
+              Published article URL
+              <Input
+                ref={publishedInput}
+                type="url"
+                required
+                maxLength={2048}
+                className="mt-1"
+                placeholder="https://publisher.com/published-article"
+                value={publishedUrl}
+                onChange={(event) => setPublishedUrl(event.target.value)}
+              />
+            </label>
+            <div className="flex justify-end">
+              <Button type="submit" disabled={!!saving || !publishedUrl.trim()}>
+                {saving
+                  ? "Saving…"
+                  : status === "live"
+                    ? "Save link"
+                    : "Save link and mark Live"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
       <Dialog
         open={rejecting}
         onOpenChange={(open) => {

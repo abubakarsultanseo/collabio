@@ -4,11 +4,13 @@ import { createRequestBatch, exchangeInput } from "@/lib/exchange-input";
 import { requestStatuses } from "@/lib/request-statuses";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isDocumentRequest } from "@/lib/request-content";
 import { accessiblePartnershipIds, requestList } from "@/server/request-list";
 import {
   contentColumns,
   contentInput,
+  expandRequestContent,
+  guestPostLinksInput,
+  httpUrl,
   validateContent,
 } from "@/lib/request-input";
 import {
@@ -21,6 +23,7 @@ import { sendCollabEmail } from "@/lib/email-notifications";
 
 const requestSchema = contentInput.extend({
   partnershipId: z.string().uuid(),
+  guestPostLinks: guestPostLinksInput,
   ...exchangeInput,
 });
 const patchSchema = z
@@ -28,6 +31,7 @@ const patchSchema = z
     ...contentInput.partial().shape,
     id: z.string().uuid(),
     status: z.enum(requestStatuses).optional(),
+    liveUrl: httpUrl.optional(),
     dealId: exchangeInput.dealId,
     markSeen: z.boolean().optional(),
     reason: z.string().trim().min(1).max(2000).optional(),
@@ -49,6 +53,10 @@ const patchSchema = z
   .refine(
     (value) => !value.reason || value.status === "rejected",
     "A reason applies only when rejecting a request.",
+  )
+  .refine(
+    (value) => !value.liveUrl || value.status === "live",
+    "A published URL can only be saved with Live status.",
   );
 
 async function session() {
@@ -106,8 +114,13 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     const input = parsed.data;
-    const issue = attachmentError(file) ?? validateContent(input, !!file);
-    if (issue) return NextResponse.json({ error: issue }, { status: 400 });
+    const expanded = expandRequestContent(input, !!file);
+    const issue = attachmentError(file) ?? expanded.issue;
+    if (issue || !expanded.rows)
+      return NextResponse.json(
+        { error: issue ?? "Invalid request details." },
+        { status: 400 },
+      );
     const db = createAdminClient();
     const ids = await accessiblePartnershipIds(
       current.user.id,
@@ -168,11 +181,9 @@ export async function POST(request: Request) {
     const attachment = file
       ? await uploadRequestAttachment(db, input.partnershipId, file)
       : null;
-    const {
-      rows: [created],
-      error,
-    } = await createRequestBatch(db, [
-      {
+    const { rows: created, error } = await createRequestBatch(
+      db,
+      expanded.rows.map((columns) => ({
         partnership_id: input.partnershipId,
         deal_id: input.dealId ?? null,
         exchange_ratio: input.exchangeRatio,
@@ -180,11 +191,12 @@ export async function POST(request: Request) {
         sender_id: current.user.id,
         receiver_id: receiverId,
         direction,
-        ...contentColumns(input),
+        ...columns,
         ...attachment,
-      },
-    ]);
-    if (error || !created) {
+      })),
+    );
+    const first = created[0];
+    if (error || !first) {
       if (attachment)
         await db.storage
           .from(requestAttachmentBucket)
@@ -194,21 +206,23 @@ export async function POST(request: Request) {
       throw error ?? new Error("Could not create request.");
     }
     after(async () => {
-      await sendCollabEmail(db, {
-        to: receiver.email,
-        requestId: created.id,
-        template: "new_request",
-        subject: "New Collabio request",
-        message: `${sender.full_name} sent you a collaboration request.`,
-        anchor: isDocumentRequest(input.requestType)
-          ? undefined
-          : (input.anchorText ?? undefined),
-        actor: sender.full_name,
-        recipient: receiver.full_name,
-      });
+      await Promise.all(
+        created.map((row) =>
+          sendCollabEmail(db, {
+            to: receiver.email,
+            requestId: row.id,
+            template: "new_request",
+            subject: "New Collabio request",
+            message: `${sender.full_name} sent you a collaboration request.`,
+            anchor: row.anchor_text,
+            actor: sender.full_name,
+            recipient: receiver.full_name,
+          }),
+        ),
+      );
     });
     return NextResponse.json(
-      { success: true, ...created, receiverId },
+      { success: true, ...first, receiverId, created, count: created.length },
       { status: 201 },
     );
   } catch (error) {
@@ -233,7 +247,7 @@ export async function PATCH(request: Request) {
         { error: parsed.error.issues[0]?.message ?? "Invalid request update." },
         { status: 400 },
       );
-    const { id, markSeen, reason, ...changes } = parsed.data;
+    const { id, markSeen, reason, liveUrl, ...changes } = parsed.data;
     const db = createAdminClient();
     const { data: row, error: findError } = await db
       .from("requests")
@@ -339,10 +353,36 @@ export async function PATCH(request: Request) {
           { status: 403 },
         );
     }
+    const type = changes.requestType ?? row.request_type;
+    if (liveUrl && type !== "guest_post")
+      return NextResponse.json(
+        { error: "Published URLs are available for guest posts." },
+        { status: 400 },
+      );
+    if (
+      type === "guest_post" &&
+      (changes.status === "live" ||
+        (changes.requestType === "guest_post" &&
+          row.request_type !== "guest_post" &&
+          row.status === "live")) &&
+      !liveUrl &&
+      !row.live_url
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Add the published article URL before marking this guest post Live.",
+        },
+        { status: 400 },
+      );
+    }
     const update: Record<string, unknown> = {
       last_updated_by: current.user.id,
       updated_at: new Date().toISOString(),
     };
+    if (liveUrl) update.live_url = liveUrl;
+    else if (changes.requestType && type !== "guest_post" && row.live_url)
+      update.live_url = null;
     if (changes.status !== undefined) {
       update.status = changes.status;
       update.rejection_reason = changes.status === "rejected" ? reason : null;
@@ -407,10 +447,10 @@ export async function PATCH(request: Request) {
     }
     const write = db.from("requests").update(update).eq("id", id);
     const { data: updated, error: updateError } = await (
-      edits ? write.eq("updated_at", row.updated_at) : write
+      edits || liveUrl ? write.eq("updated_at", row.updated_at) : write
     )
       .select(
-        "id,status,first_viewed_at,updated_at,placement_page_url,anchor_text,target_link,request_type,instructions,notes,live_at,shared_at,was_overdue,rejection_reason,original_content,edited_content,document_url,listicle_position,attachment_name,deal_id",
+        "id,status,first_viewed_at,updated_at,placement_page_url,anchor_text,target_link,request_type,instructions,notes,live_at,live_url,shared_at,was_overdue,rejection_reason,original_content,edited_content,document_url,listicle_position,attachment_name,deal_id",
       )
       .maybeSingle();
     if (updateError || !updated) {

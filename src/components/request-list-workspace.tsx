@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRequestChat } from "@/components/chat/use-request-chat";
 import {
   Eye,
+  ArrowUpRight,
   StickyNote,
   FileSpreadsheet,
   Inbox,
@@ -24,7 +25,11 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { requestLabel, requestTypes } from "@/lib/request-content";
+import {
+  isDocumentRequest,
+  requestLabel,
+  requestTypes,
+} from "@/lib/request-content";
 import { EmptyState } from "@/components/app/empty-state";
 import {
   InlineStatus,
@@ -673,8 +678,22 @@ export default function RequestListWorkspace({
           status={row.status}
           enabled={row.canChangeStatus}
           busy={busy !== null}
-          onSave={(status, reason) => update(row, { status, reason })}
+          guestPost={row.request_type === "guest_post"}
+          liveUrl={row.live_url}
+          onSave={(status, reason, liveUrl) =>
+            update(row, { status, reason, liveUrl })
+          }
         />
+        {row.status === "live" && row.live_url && (
+          <a
+            href={row.live_url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-xs font-medium text-[var(--brand-dark)] hover:underline"
+          >
+            Published link <ArrowUpRight size={13} aria-hidden />
+          </a>
+        )}
         {overdue(row) && row.status !== "overdue" && (
           <span className="ml-1">
             <StatusBadge status="overdue" />
@@ -1223,7 +1242,9 @@ export default function RequestListWorkspace({
                 rel="noreferrer"
                 className="break-all text-[var(--brand-dark)]"
               >
-                Placement page ↗
+                {isDocumentRequest(activeRow.request_type)
+                  ? "Site ↗"
+                  : "Placement page ↗"}
               </a>
               {activeRow.target_link && (
                 <a

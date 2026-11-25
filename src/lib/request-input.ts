@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { isDocumentRequest, requestTypes } from "@/lib/request-content";
+import {
+  isDocumentRequest,
+  maxRequestsPerSubmission,
+  requestTypes,
+} from "@/lib/request-content";
 
 export const httpUrl = z
   .string()
@@ -16,6 +20,21 @@ const text = (limit: number) =>
     .nullish()
     .transform((value) => value || null);
 const optionalUrl = text(2048).pipe(httpUrl.nullable());
+
+export const guestPostLinksInput = z
+  .array(
+    z.object({
+      anchorText: z
+        .string()
+        .trim()
+        .min(1, "Enter anchor text for each guest post link.")
+        .max(500),
+      targetLink: httpUrl,
+    }),
+  )
+  .min(1)
+  .max(maxRequestsPerSubmission)
+  .optional();
 
 export const contentInput = z.object({
   placementPageUrl: httpUrl,
@@ -38,8 +57,12 @@ export function validateContent(input: ContentInput, hasFile: boolean) {
       if (!input.listiclePosition)
         return "Enter the requested listicle position.";
       if (!input.documentUrl) return "Enter the listicle document link.";
-    } else if (!input.documentUrl && !hasFile)
-      return "Add a document link or upload a guest-post file.";
+    } else {
+      if (!input.documentUrl && !hasFile)
+        return "Add a document link or upload a guest-post file.";
+      if (!!input.anchorText !== !!input.targetLink)
+        return "Enter both the anchor text and target URL.";
+    }
   } else if (!input.anchorText || !input.targetLink) {
     return "Enter the anchor text and target link.";
   }
@@ -48,12 +71,46 @@ export function validateContent(input: ContentInput, hasFile: boolean) {
   return null;
 }
 
+export function expandRequestContent(
+  input: ContentInput & {
+    guestPostLinks?: z.output<typeof guestPostLinksInput>;
+  },
+  hasFile = false,
+) {
+  if (input.requestType !== "guest_post") {
+    if (input.guestPostLinks)
+      return { issue: "Add link pairs only to guest posts." };
+    const issue = validateContent(input, hasFile);
+    return issue ? { issue } : { rows: [contentColumns(input)] };
+  }
+
+  if (!input.documentUrl)
+    return { issue: "Enter the guest post document link." };
+  const pairs = input.guestPostLinks ?? [
+    {
+      anchorText: input.anchorText,
+      targetLink: input.targetLink,
+    },
+  ];
+  if (pairs.some((pair) => !pair.anchorText || !pair.targetLink))
+    return {
+      issue: "Enter an anchor text and target URL for each guest post link.",
+    };
+  if (pairs.length > 1 && hasFile)
+    return {
+      issue:
+        "Use a shared document link when sending multiple guest post requests.",
+    };
+
+  return { rows: pairs.map((pair) => contentColumns({ ...input, ...pair })) };
+}
+
 export function contentColumns(input: ContentInput) {
   const isDocument = isDocumentRequest(input.requestType);
   return {
     placement_page_url: input.placementPageUrl,
-    anchor_text: isDocument ? null : input.anchorText,
-    target_link: isDocument ? null : input.targetLink,
+    anchor_text: input.requestType === "listicle" ? null : input.anchorText,
+    target_link: input.requestType === "listicle" ? null : input.targetLink,
     request_type: input.requestType,
     original_content: isDocument ? null : input.originalContent,
     edited_content: isDocument ? null : input.editedContent,

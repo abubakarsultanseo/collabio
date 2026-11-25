@@ -148,8 +148,7 @@ export default function RequestDetails({
     }
   }
 
-  const documentRequest =
-    isDocumentRequest(row.request_type) && !row.anchor_text;
+  const documentRequest = isDocumentRequest(row.request_type);
   const legacyContent = originalAndEdited(row.instructions);
   const fields: {
     label: string;
@@ -174,6 +173,19 @@ export default function RequestDetails({
           {
             label: "Document link",
             value: row.document_url ?? "",
+            link: true,
+            copy: true,
+          },
+          { label: "Anchor text", value: row.anchor_text ?? "", copy: true },
+          {
+            label: "Target URL",
+            value: row.target_link ?? "",
+            link: true,
+            copy: true,
+          },
+          {
+            label: "Published article URL",
+            value: row.live_url ?? "",
             link: true,
             copy: true,
           },

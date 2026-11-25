@@ -114,7 +114,7 @@ async function requestAccess(ctx: Context, requestId: string, write = false) {
   const request = ctx.auth
     .from("requests")
     .select(
-      "id,request_code:partner_request_number,placement_page_url,anchor_text,target_link,request_type,status,document_url,attachment_name",
+      "id,request_code:partner_request_number,placement_page_url,anchor_text,target_link,request_type,status,document_url,attachment_name,live_url",
     )
     .eq("id", requestId)
     .maybeSingle();

@@ -131,3 +131,12 @@ If SQL Editor reports that `requests_partner_number_unique` is missing, replace 
 2. Open Received and Sent under **Requests**. The first page contains lightweight rows. Opening **View** or **Edit** loads the full request. The filter menu includes saved filters and Excel export. Check that separate directional request numbers and partner permissions are preserved.
 3. As a partner, open direct chat and confirm it opens your assigned admin’s thread. Reopen a recently viewed thread and confirm the cached conversation appears while new messages sync. As an admin, confirm the partner contact list still works. Test thread permissions with two partner accounts.
 4. Verify dashboard totals against more than 200 requests. The recent list is limited to eight entries while the totals count the whole authorized scope.
+
+
+### Guest post links and publishing
+
+Apply `supabase/migrations/0014_guest_post_live_links.sql` after 0013 and before deploying this release.
+
+On a partner workspace, choose **Guest post**, enter the **Site URL** and shared **Guest post document link**, then enter the first anchor and target URL. Use **Add more** for additional links. Collabio saves one numbered request per pair in a single submission, and the selected exchange terms apply to each request. A submission may contain up to 50 requests.
+
+Choose **Live** from a guest post's status menu, enter the published article URL, and save. The shared draft and published URL are separate fields. The Live status menu also lets authorized users add or edit the published URL on an existing Live guest post.

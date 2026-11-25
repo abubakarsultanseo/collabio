@@ -89,8 +89,8 @@ export async function requestList(url: URLSearchParams, current: Viewer) {
     const partnerCanUpdateStatus =
       permission?.data?.update_request_status === true;
     const columns: string = summary
-      ? "id,request_code:partner_request_number,partnership_id,partner_id,sender_id,receiver_id,placement_page_url,anchor_text,request_type,status,first_viewed_at,deadline_at,was_overdue,created_at,import_key,import_date_unknown,sender:profiles!requests_sender_id_fkey(full_name),receiver:profiles!requests_receiver_id_fkey(full_name)"
-      : "id,request_code:partner_request_number,partnership_id,deal_id,link_side,partner_id,sender_id,receiver_id,direction,placement_page_url,anchor_text,target_link,request_type,instructions,notes,status,first_viewed_at,deadline_at,was_overdue,overdue_at,completed_at,created_at,updated_at,shared_at,live_at,rejection_reason,import_key,original_content,edited_content,document_url,listicle_position,attachment_name,import_date_unknown";
+      ? "id,request_code:partner_request_number,partnership_id,partner_id,sender_id,receiver_id,placement_page_url,anchor_text,request_type,status,live_url,first_viewed_at,deadline_at,was_overdue,created_at,import_key,import_date_unknown,sender:profiles!requests_sender_id_fkey(full_name),receiver:profiles!requests_receiver_id_fkey(full_name)"
+      : "id,request_code:partner_request_number,partnership_id,deal_id,link_side,partner_id,sender_id,receiver_id,direction,placement_page_url,anchor_text,target_link,request_type,instructions,notes,status,first_viewed_at,deadline_at,was_overdue,overdue_at,completed_at,created_at,updated_at,shared_at,live_at,live_url,rejection_reason,import_key,original_content,edited_content,document_url,listicle_position,attachment_name,import_date_unknown";
     let query = db
       .from("requests")
       .select(columns)

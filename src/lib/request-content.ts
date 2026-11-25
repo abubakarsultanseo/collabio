@@ -25,6 +25,7 @@ export type RequestContent = {
   original_content?: string | null;
   edited_content?: string | null;
   document_url?: string | null;
+  live_url?: string | null;
   attachment_name?: string | null;
   listicle_position?: string | null;
   import_date_unknown?: boolean;
@@ -63,11 +64,14 @@ export function originalAndEdited(instructions?: string | null) {
 }
 
 export function copyRequest(row: RequestContent) {
-  if (isDocumentRequest(row.request_type) && !row.anchor_text) {
+  if (isDocumentRequest(row.request_type)) {
     return [
       `Site: ${row.placement_page_url}`,
       row.listicle_position && `Position: ${row.listicle_position}`,
       row.document_url && `Document: ${row.document_url}`,
+      row.anchor_text && `Anchor Text: ${row.anchor_text}`,
+      row.target_link && `Target Link: ${row.target_link}`,
+      row.live_url && `Live URL: ${row.live_url}`,
       row.attachment_name && `Attachment: ${row.attachment_name}`,
       row.instructions && `Instructions:\n${row.instructions}`,
     ]
@@ -86,5 +90,7 @@ export function copyRequest(row: RequestContent) {
     row.edited_content ?? legacy.edited,
   ].join("\n");
 }
+
+export const maxRequestsPerSubmission = 50;
 
 export const maxAttachmentBytes = 3 * 1024 * 1024;

@@ -10,7 +10,7 @@ import {
 } from "react";
 import { Copy, ExternalLink, Send } from "lucide-react";
 import type { ChatTarget } from "@/components/chat/chat-context";
-import { requestLabel } from "@/lib/request-content";
+import { isDocumentRequest, requestLabel } from "@/lib/request-content";
 import { Avatar } from "@/components/app/avatar";
 import { useToast } from "@/components/app/toast";
 import { StatusBadge, formatStatus } from "@/components/status-badge";
@@ -32,6 +32,7 @@ type RequestDetails = {
   anchor_text: string | null;
   target_link: string | null;
   document_url?: string | null;
+  live_url?: string | null;
   attachment_name?: string | null;
   request_type: string;
   status: string;
@@ -510,7 +511,9 @@ export function ChatThread({
                 rel="noreferrer"
                 className="inline-flex items-center gap-1"
               >
-                {request.anchor_text ? "Placement page" : "Site"}{" "}
+                {isDocumentRequest(request.request_type)
+                  ? "Site"
+                  : "Placement page"}{" "}
                 <ExternalLink size={12} aria-hidden />
               </a>
               {request.anchor_text && (
@@ -547,6 +550,16 @@ export function ChatThread({
                   className="inline-flex items-center gap-1"
                 >
                   Document <ExternalLink size={12} aria-hidden />
+                </a>
+              )}
+              {request.status === "live" && request.live_url && (
+                <a
+                  href={request.live_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1"
+                >
+                  Published link <ExternalLink size={12} aria-hidden />
                 </a>
               )}
               {request.attachment_name && (

@@ -159,7 +159,9 @@ export default function PartnershipDetail({
       setFormVersion((version) => version + 1);
       refreshExchangeOverview();
       notify(
-        `Request #${data.request_code} sent. The receiver has 24 hours to review it.`,
+        data.count > 1
+          ? `${data.count} requests sent. Each link has its own request number.`
+          : `Request #${data.request_code} sent. The receiver has 24 hours to review it.`,
         "success",
       );
       await load();
@@ -172,12 +174,17 @@ export default function PartnershipDetail({
       setBusy(false);
     }
   }
-  async function setStatus(row: RequestRow, status: string, reason?: string) {
+  async function setStatus(
+    row: RequestRow,
+    status: string,
+    reason?: string,
+    liveUrl?: string,
+  ) {
     try {
       const response = await fetch("/api/requests", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: row.id, status, reason }),
+        body: JSON.stringify({ id: row.id, status, reason, liveUrl }),
       });
       const data = await response.json();
       if (!response.ok)
@@ -385,6 +392,19 @@ export default function PartnershipDetail({
                       : `Review by ${new Date(row.deadline_at).toLocaleString("en-PK", { timeZone: "Asia/Karachi" })}`}
                   </span>
                   <div className="flex items-center gap-3">
+                    {row.status === "live" && row.live_url && (
+                      <a
+                        href={row.live_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={buttonVariants({
+                          variant: "outline",
+                          size: "sm",
+                        })}
+                      >
+                        Published link <ArrowUpRight size={14} aria-hidden />
+                      </a>
+                    )}
                     <Button
                       type="button"
                       variant="outline"
@@ -426,8 +446,10 @@ export default function PartnershipDetail({
                     <InlineStatus
                       status={row.status}
                       enabled={row.canChangeStatus}
-                      onSave={(status, reason) =>
-                        setStatus(row, status, reason)
+                      guestPost={row.request_type === "guest_post"}
+                      liveUrl={row.live_url}
+                      onSave={(status, reason, liveUrl) =>
+                        setStatus(row, status, reason, liveUrl)
                       }
                     />
                   </div>

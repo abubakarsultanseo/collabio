@@ -5,21 +5,20 @@ import { createRequestBatch, exchangeInput } from "@/lib/exchange-input";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
-  contentColumns,
   contentInput,
-  validateContent,
+  expandRequestContent,
+  guestPostLinksInput,
 } from "@/lib/request-input";
+import { maxRequestsPerSubmission } from "@/lib/request-content";
 import { sendCollabEmail } from "@/lib/email-notifications";
 
-const itemSchema = contentInput
-  .extend(exchangeInput)
-  .superRefine((item, context) => {
-    const issue = validateContent(item, false);
-    if (issue) context.addIssue({ code: "custom", message: issue });
-  });
+const itemSchema = contentInput.extend({
+  ...exchangeInput,
+  guestPostLinks: guestPostLinksInput,
+});
 const schema = z.object({
   partnershipId: z.string().uuid(),
-  requests: z.array(itemSchema).min(1).max(50),
+  requests: z.array(itemSchema).min(1).max(maxRequestsPerSubmission),
 });
 export async function POST(request: Request) {
   try {
@@ -49,6 +48,24 @@ export async function POST(request: Request) {
         {
           error:
             parsed.error.issues[0]?.message ?? "Enter valid request details.",
+        },
+        { status: 400 },
+      );
+    const entries = parsed.data.requests.map((item) => ({
+      item,
+      ...expandRequestContent(item),
+    }));
+    const invalid = entries.find((entry) => !entry.rows);
+    if (invalid)
+      return NextResponse.json({ error: invalid.issue }, { status: 400 });
+    const total = entries.reduce(
+      (count, entry) => count + (entry.rows?.length ?? 0),
+      0,
+    );
+    if (total > maxRequestsPerSubmission)
+      return NextResponse.json(
+        {
+          error: `Send up to ${maxRequestsPerSubmission} requests per submission, including guest post links.`,
         },
         { status: 400 },
       );
@@ -105,16 +122,18 @@ export async function POST(request: Request) {
       );
     const direction =
       profile.role === "admin" ? "admin_to_partner" : "partner_to_admin";
-    const payload = parsed.data.requests.map((item) => ({
-      partnership_id: pair.id,
-      deal_id: item.dealId ?? null,
-      exchange_ratio: item.exchangeRatio,
-      partner_id: partner.id,
-      sender_id: user.id,
-      receiver_id: receiverId,
-      direction,
-      ...contentColumns(item),
-    }));
+    const payload = entries.flatMap(({ item, rows }) =>
+      (rows ?? []).map((columns) => ({
+        partnership_id: pair.id,
+        deal_id: item.dealId ?? null,
+        exchange_ratio: item.exchangeRatio,
+        partner_id: partner.id,
+        sender_id: user.id,
+        receiver_id: receiverId,
+        direction,
+        ...columns,
+      })),
+    );
     const { rows: created, error: createError } = await createRequestBatch(
       db,
       payload,

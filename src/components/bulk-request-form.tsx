@@ -3,8 +3,12 @@ import { ExchangeFields } from "@/components/requests/exchange-controls";
 import type { ExchangeOverview } from "@/lib/exchanges";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/app/toast";
+import { maxRequestsPerSubmission } from "@/lib/request-content";
 import { useRef, useState } from "react";
-import { RequestContentFields } from "@/components/requests/request-content-fields";
+import {
+  RequestContentFields,
+  requestFormValues,
+} from "@/components/requests/request-content-fields";
 
 export default function BulkRequestForm({
   partnershipId,
@@ -25,15 +29,15 @@ export default function BulkRequestForm({
     event.preventDefault();
     const requests = Array.from(
       event.currentTarget.querySelectorAll("fieldset"),
-    ).map((group) =>
-      Object.fromEntries(
-        Array.from(
-          group.querySelectorAll<
-            HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-          >("[name]"),
-        ).map((field) => [field.name, field.value]),
-      ),
-    );
+    ).map((group) => {
+      const fields = new FormData();
+      group
+        .querySelectorAll<
+          HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+        >("[name]")
+        .forEach((field) => fields.append(field.name, field.value));
+      return requestFormValues(fields);
+    });
     setBusy(true);
     try {
       const response = await fetch("/api/requests/bulk", {
@@ -65,7 +69,7 @@ export default function BulkRequestForm({
         </div>
         <button
           type="button"
-          disabled={items.length >= 50}
+          disabled={items.length >= maxRequestsPerSubmission}
           onClick={() => setItems((current) => [...current, nextId.current++])}
           className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--text)] disabled:opacity-50"
         >
@@ -96,7 +100,7 @@ export default function BulkRequestForm({
         </fieldset>
       ))}
       <Button disabled={busy}>
-        {busy ? "Submitting requests…" : `Send ${items.length} requests`}
+        {busy ? "Submitting requests…" : "Send requests"}
       </Button>
     </form>
   );
