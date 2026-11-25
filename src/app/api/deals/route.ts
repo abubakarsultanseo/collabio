@@ -144,6 +144,16 @@ export async function GET(request: Request) {
         side,
         partnerName: partner?.data?.full_name || "Partner",
         balance,
+        previousBalance: {
+          giveDue:
+            (side === "a"
+              ? counts?.side_a_previous_due
+              : counts?.side_b_previous_due) ?? 0,
+          receiveDue:
+            (side === "a"
+              ? counts?.side_b_previous_due
+              : counts?.side_a_previous_due) ?? 0,
+        },
         exchanges: (progress.data ?? []).map(
           ({ opening_request_number, ...exchange }) => ({
             ...exchange,

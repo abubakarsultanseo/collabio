@@ -471,7 +471,9 @@ export async function PATCH(request: Request) {
             .from("profiles")
             .select("email,full_name")
             .eq("id", row.sender_id)
+            .is("deleted_at", null)
             .maybeSingle();
+          if (!sender) return;
           await sendCollabEmail(db, {
             to: sender?.email,
             requestId: id,
@@ -625,7 +627,9 @@ export async function PATCH(request: Request) {
           .from("profiles")
           .select("email,full_name")
           .eq("id", recipientId)
+          .is("deleted_at", null)
           .maybeSingle();
+        if (!recipient) return;
         await sendCollabEmail(db, {
           to: recipient?.email,
           requestId: id,

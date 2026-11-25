@@ -87,6 +87,7 @@ export default async function Dashboard() {
   const [
     { data: requests, error: requestsError },
     { count: activePartnerCount, error: countError },
+    { data: deletedPartners, error: deletedPartnersError },
   ] = await Promise.all([
     loadRequests(),
     adminView
@@ -96,9 +97,17 @@ export default async function Dashboard() {
           .eq("role", "partner")
           .eq("account_status", "active")
       : Promise.resolve({ count: 1, error: null }),
+    adminView && ids.length
+      ? db.from("profiles").select("id").not("deleted_at", "is", null)
+      : Promise.resolve({ data: [], error: null }),
   ]);
   if (requestsError) throw new Error(requestsError.message);
   if (countError) throw new Error(countError.message);
+  if (
+    deletedPartnersError &&
+    !missingColumn(deletedPartnersError, "deleted_at")
+  )
+    throw new Error(deletedPartnersError.message);
   const all = (requests ?? []).filter((row) => row.status !== "cancelled");
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -131,31 +140,37 @@ export default async function Dashboard() {
   ).length;
   const live = all.filter((row) => row.status === "live").length;
   const recent = all.slice(0, 8);
-  const partnerStats = rows.map((partnership) => {
-    const counterpartId =
-      partnership.user_a_id === user.id
-        ? partnership.user_b_id
-        : partnership.user_a_id;
-    const count = all.filter(
-      (row) => row.partnership_id === partnership.id,
-    ).length;
-    const inbound = all.filter(
-      (row) =>
-        row.partnership_id === partnership.id && row.receiver_id === user.id,
-    ).length;
-    const outbound = all.filter(
-      (row) =>
-        row.partnership_id === partnership.id && row.sender_id === user.id,
-    ).length;
-    return {
-      id: partnership.id,
-      name: partnership.name,
-      counterpartId,
-      count,
-      inbound,
-      outbound,
-    };
-  });
+  const deletedIds = new Set(deletedPartners?.map((partner) => partner.id));
+  const partnerStats = rows
+    .filter(
+      ({ user_a_id, user_b_id }) =>
+        !deletedIds.has(user_a_id) && !deletedIds.has(user_b_id),
+    )
+    .map((partnership) => {
+      const counterpartId =
+        partnership.user_a_id === user.id
+          ? partnership.user_b_id
+          : partnership.user_a_id;
+      const count = all.filter(
+        (row) => row.partnership_id === partnership.id,
+      ).length;
+      const inbound = all.filter(
+        (row) =>
+          row.partnership_id === partnership.id && row.receiver_id === user.id,
+      ).length;
+      const outbound = all.filter(
+        (row) =>
+          row.partnership_id === partnership.id && row.sender_id === user.id,
+      ).length;
+      return {
+        id: partnership.id,
+        name: partnership.name,
+        counterpartId,
+        count,
+        inbound,
+        outbound,
+      };
+    });
   const profileIds = [
     ...new Set(recent.flatMap((row) => [row.sender_id, row.receiver_id])),
   ];

@@ -6,7 +6,9 @@ export const exchangeInput = {
   dealId: z
     .union([z.string().uuid(), z.literal("").transform(() => null)])
     .nullish(),
-  exchangeRatio: z.enum(exchangeRatios).optional(),
+  exchangeRatio: z
+    .union([z.enum(exchangeRatios), z.literal("").transform(() => undefined)])
+    .optional(),
 };
 
 const savedRequests = z.array(

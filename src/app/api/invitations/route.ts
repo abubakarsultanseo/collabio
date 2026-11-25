@@ -59,10 +59,15 @@ export async function POST(request: Request) {
     const email = input.email.toLowerCase();
     const { data: existing, error: existingError } = await admin
       .from("profiles")
-      .select("id,account_status")
+      .select("account_status,deleted_at")
       .eq("email", email)
       .maybeSingle();
     if (existingError) throw existingError;
+    if (existing?.deleted_at)
+      return NextResponse.json(
+        { error: "This email belongs to a deleted partner account." },
+        { status: 409 },
+      );
     if (existing?.account_status === "active")
       return NextResponse.json(
         { error: "An active account already exists for this email." },

@@ -1,6 +1,6 @@
 "use client";
 import { EmptyState } from "@/components/app/empty-state";
-import { Users, Mail } from "lucide-react";
+import { Users, Mail, Trash2 } from "lucide-react";
 import { useToast } from "@/components/app/toast";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
@@ -28,6 +28,7 @@ type Invitation = {
 export default function TeamAdminPanel() {
   const notify = useToast();
   const [deactivateTarget, setDeactivateTarget] = useState<Member | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Member | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -84,6 +85,38 @@ export default function TeamAdminPanel() {
       setBusy(null);
     }
   }
+  async function deletePartner(member: Member) {
+    setBusy(member.id);
+    try {
+      const response = await fetch("/api/team", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: member.id }),
+      });
+      const data = await response.json();
+      if (!response.ok)
+        throw new Error(data.error ?? "Could not delete partner.");
+      setMembers((current) => current.filter((item) => item.id !== member.id));
+      setInvitations((current) =>
+        current.filter(
+          (item) => item.email.toLowerCase() !== member.email.toLowerCase(),
+        ),
+      );
+      setDeleteTarget(null);
+      notify(
+        `${member.full_name} was deleted. Workspace history is kept.`,
+        "success",
+      );
+    } catch (error) {
+      notify(
+        error instanceof Error ? error.message : "Could not delete partner.",
+        "error",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const pending = invitations.filter(
     (item) =>
       item.status === "pending" &&
@@ -96,7 +129,7 @@ export default function TeamAdminPanel() {
           <div>
             <h2 className="font-semibold">Team members</h2>
             <p className="text-[var(--muted)] mt-1 text-sm">
-              Manage admin roles and account access.
+              Manage admin roles, account access, and partner removal.
             </p>
           </div>
           <Button
@@ -197,6 +230,19 @@ export default function TeamAdminPanel() {
                             Activate
                           </button>
                         )}
+                        {member.role === "partner" && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={busy === member.id}
+                            onClick={() => setDeleteTarget(member)}
+                            className="border-[var(--red)] text-[var(--red)] hover:bg-[var(--danger-bg)]"
+                          >
+                            <Trash2 size={14} aria-hidden="true" />
+                            Delete partner
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -259,6 +305,17 @@ export default function TeamAdminPanel() {
           </div>
         )}
       </section>
+      {deleteTarget && (
+        <ConfirmDialog
+          open
+          title={`Delete ${deleteTarget.full_name}?`}
+          description="This revokes the partner’s access, cancels pending invitations, and removes them from partner lists. Requests and conversation history are kept."
+          confirmLabel="Delete partner"
+          busy={busy === deleteTarget.id}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => void deletePartner(deleteTarget)}
+        />
+      )}
       {deactivateTarget && (
         <ConfirmDialog
           open

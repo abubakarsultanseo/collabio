@@ -39,7 +39,7 @@ export async function GET() {
     if ("error" in state) return state.error;
     const admin = createAdminClient();
     let query = admin
-      .from("partnerships")
+      .from("listed_partnerships")
       .select("id,name,user_a_id,user_b_id,created_at")
       .order("created_at", { ascending: false });
     if (state.role !== "admin")

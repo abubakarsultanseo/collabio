@@ -10,7 +10,7 @@ export default async function PartnershipsPage() {
   const isAdmin = profile?.role === "admin";
   const db = createAdminClient();
   const partnershipQuery = db
-    .from("partnerships")
+    .from("listed_partnerships")
     .select("id,name,user_a_id,user_b_id,created_at")
     .order("created_at", { ascending: false });
   const [{ data: partnerships }, { data: people }] = await Promise.all([

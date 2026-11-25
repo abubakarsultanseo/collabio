@@ -35,5 +35,6 @@ export type ExchangeOverview = {
     giveDue: number;
     receiveDue: number;
   };
+  previousBalance: { giveDue: number; receiveDue: number };
   exchanges: Exchange[];
 };

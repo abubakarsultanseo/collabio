@@ -106,7 +106,9 @@ export function ExchangeBalance({
       </p>
     );
   if (!overview.side) return null;
-  const { balance } = overview;
+  const { balance, previousBalance } = overview;
+  const hasPreviousBalance =
+    previousBalance.giveDue > 0 || previousBalance.receiveDue > 0;
   return (
     <section className="os-card space-y-3 p-4" aria-label="Exchange balance">
       <h2 className="font-semibold">
@@ -125,6 +127,12 @@ export function ExchangeBalance({
           </div>
         ))}
       </dl>
+      {hasPreviousBalance && (
+        <p className="text-sm text-[var(--muted)]">
+          Previous link balance (1:1) · You owe {previousBalance.giveDue} ·{" "}
+          {overview.partnerName} owes {previousBalance.receiveDue}
+        </p>
+      )}
       {showExchanges && overview.exchanges.length > 0 && (
         <details className="border-t border-[var(--border)] pt-3 text-sm" open>
           <summary className="cursor-pointer font-medium">
@@ -173,7 +181,7 @@ export function ExchangeFields({
   currentDealId?: string | null;
 }) {
   const [dealId, setDealId] = useState(currentDealId ?? "");
-  const [ratio, setRatio] = useState<ExchangeRatio>(defaultExchangeRatio);
+  const [ratio, setRatio] = useState<ExchangeRatio | "">(defaultExchangeRatio);
   const [youGive, theyGive] = ratio.split(":").map(Number);
   const partner = overview?.partnerName ?? partnerName ?? "Partner";
   const available = overview?.side
@@ -216,19 +224,21 @@ export function ExchangeFields({
             name="exchangeRatio"
             className="mt-1"
             value={ratio}
-            onChange={(event) => setRatio(event.target.value as ExchangeRatio)}
+            onChange={(event) =>
+              setRatio(event.target.value as ExchangeRatio | "")
+            }
           >
             {exchangeRatios.map((option) => (
               <option key={option} value={option}>
                 {option}
               </option>
             ))}
+            <option value="">Apply to previous balance (1:1)</option>
           </Select>
           <span className="mt-1 block text-xs text-[var(--muted)]">
-            You give {youGive} · {partner} gives {theyGive} ·{" "}
-            {youGive < theyGive
-              ? "You publish first"
-              : `${partner} publishes first`}
+            {ratio
+              ? `You give ${youGive} · ${partner} gives ${theyGive} · ${youGive < theyGive ? "You publish first" : `${partner} publishes first`}`
+              : "This placement counts toward the 1:1 balance when it goes Live."}
           </span>
         </label>
       )}

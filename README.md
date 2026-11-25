@@ -105,5 +105,14 @@ Apply `supabase/migrations/0010_partner_request_exchanges.sql` after 0009 and be
 
 - In **Sent Requests** or **Received Requests**, select a partner under the filters. **Pending** includes Hold, Removed and Rejected requests. Cancelled requests are listed under **Cancelled** and are excluded from request totals and fulfilment.
 - In a partner workspace, start a new exchange when creating a request or select an existing open exchange. The ratio is shown as **links you give : links the partner gives**. The smaller commitment publishes first. For 1:1, the recipient of the opening request publishes first. The return slots become due after the first publisher has a Live placement. Only Live placements fill slots.
-- To add an existing request to a tracked exchange, an admin can open **Sent Requests** or **Received Requests**, click **Edit**, select the exchange and click **Save linked exchange**. Historical Live requests count in the given and received totals. They affect an exchange only when linked to it.
+- To add an existing request to a tracked exchange, an admin can open **Sent Requests** or **Received Requests**, click **Edit**, select the exchange and click **Save linked exchange**. Unlinked Live requests count toward the previous 1:1 balance. Requests in a tracked exchange count toward that exchange’s quotas.
 - Verify the updated invitation in a preview using a test invite. It uses the same Collabio email design and includes the sender, the partner's name and the Accept Invitation button.
+
+
+### Partner balances and account removal
+
+Apply `supabase/migrations/0011_partner_balance_and_deletion.sql` after 0010 and before deploying this update.
+
+- A Live link counts as given by the workspace member who published it. Previous placements without a tracked ratio are reconciled 1:1. If you published seven and your partner published four, your partner still owes three links. Only Live placements enter this balance.
+- Use **Apply to previous balance (1:1)** in the request form to settle that balance without opening a tracked exchange. The placement counts once it is Live. For a tracked 2:1 exchange, the agreed two return slots still become due after the first link goes Live.
+- In **Team & Invitations → Team members**, an admin can choose **Delete partner** and confirm. This revokes access and pending invitations, stops queued reminders, and hides the account from partner lists. Historical requests remain accessible to admins in the all-partners request views.
