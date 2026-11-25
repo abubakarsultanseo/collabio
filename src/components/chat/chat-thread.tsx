@@ -39,11 +39,19 @@ type RequestDetails = {
 type ThreadResponse = {
   messages: Message[];
   hasOlder: boolean;
+  hasNewer?: boolean;
+  threadId?: string;
   userId: string;
   canWrite: boolean;
   title?: string;
   avatar_url?: string | null;
   request?: RequestDetails;
+};
+
+export type ChatSnapshot = {
+  data: ThreadResponse;
+  cursor?: Message;
+  at: number;
 };
 
 class ThreadAccessError extends Error {}
@@ -121,35 +129,47 @@ export function ChatThread({
   open,
   initialDraft = "",
   onDraft,
+  initialSnapshot,
+  onSnapshot,
 }: {
   target: ChatTarget;
   open: (target: ChatTarget) => void;
   initialDraft?: string;
   onDraft?: (value: string) => void;
+  initialSnapshot?: ChatSnapshot;
+  onSnapshot: (snapshot?: ChatSnapshot) => void;
 }) {
   const notify = useToast();
-  const [info, setInfo] = useState<ThreadResponse | null>(null);
-  const [history, setHistory] = useState<Message[]>([]);
+  const [info, setInfo] = useState<ThreadResponse | null>(
+    initialSnapshot?.data ?? null,
+  );
+  const [history, setHistory] = useState<Message[]>(
+    initialSnapshot?.data.messages ?? [],
+  );
   const [outbox, setOutbox] = useState<Outbox[]>([]);
-  const [older, setOlder] = useState(false);
+  const [older, setOlder] = useState(initialSnapshot?.data.hasOlder ?? false);
   const [paging, setPaging] = useState(false);
   const [error, setError] = useState("");
   const [body, setBody] = useState(initialDraft);
   const [next, setNext] = useState<ChatTarget | undefined>();
   const list = useRef<HTMLDivElement>(null);
-  const historyRef = useRef<Message[]>([]);
+  const historyRef = useRef<Message[]>(initialSnapshot?.data.messages ?? []);
+  const cursor = useRef(initialSnapshot?.cursor);
+  const olderAvailable = useRef(initialSnapshot?.data.hasOlder ?? false);
+  const resolvedThreadId = useRef(initialSnapshot?.data.threadId);
+  const snapshot = useRef(onSnapshot);
   const savedFloor = useRef<{ height: number; top: number } | null>(null);
   const shouldScroll = useRef(true);
   const latestRead = useRef<string | null>(null);
   const readPending = useRef(false);
-  const historyGeneration = useRef(0);
   const refreshing = useRef(false);
   const pending = useRef(new Set<string>());
   const actions = useRef(target);
 
   useEffect(() => {
     actions.current = target;
-  }, [target]);
+    snapshot.current = onSnapshot;
+  }, [target, onSnapshot]);
 
   const markVisible = useCallback(async () => {
     const newest = historyRef.current.at(-1);
@@ -166,7 +186,13 @@ export function ChatThread({
       return;
     readPending.current = true;
     try {
-      await chatAction(actions.current, "read", newest.id);
+      const thread = actions.current;
+      if (thread.threadId === "assigned" && !resolvedThreadId.current) return;
+      await chatAction(
+        { ...thread, threadId: resolvedThreadId.current ?? thread.threadId },
+        "read",
+        newest.id,
+      );
       latestRead.current = newest.id;
       actions.current.onRead?.(actions.current.threadId);
       setNext(actions.current.nextUnread?.());
@@ -178,14 +204,18 @@ export function ChatThread({
   }, []);
 
   const fetchPage = useCallback(
-    async (before?: Message, signal?: AbortSignal): Promise<ThreadResponse> => {
+    async (
+      anchor?: Message,
+      signal?: AbortSignal,
+      direction = "before",
+    ): Promise<ThreadResponse> => {
       const params = new URLSearchParams({
         kind: target.kind,
         threadId: target.threadId,
       });
-      if (before) {
-        params.set("beforeAt", before.created_at);
-        params.set("beforeId", before.id);
+      if (anchor) {
+        params.set(`${direction}At`, anchor.created_at);
+        params.set(`${direction}Id`, anchor.id);
       }
       const response = await fetch(`/api/chats?${params}`, {
         cache: "no-store",
@@ -207,49 +237,96 @@ export function ChatThread({
     async (signal?: AbortSignal) => {
       if (document.hidden || refreshing.current) return;
       refreshing.current = true;
-      const generation = historyGeneration.current;
       try {
-        const result = await fetchPage(undefined, signal);
-        if (signal?.aborted) return;
+        let result: ThreadResponse;
+        let pages = 0;
         const current = historyRef.current;
-        if (
-          generation !== historyGeneration.current &&
-          current.at(-1)?.id !== result.messages.at(-1)?.id
-        )
-          return;
-        const newest = result.messages.at(-1);
-        const changes = newest?.id !== current.at(-1)?.id;
-        const isFirst = !current.length;
         const viewport = list.current;
         shouldScroll.current =
-          isFirst ||
+          !current.length ||
           (!!viewport &&
             viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <
               80);
-        if (changes || isFirst) {
-          const overlap = new Set(result.messages.map((message) => message.id));
-          const firstMatch = current.findIndex((message) =>
-            overlap.has(message.id),
+        do {
+          const after = cursor.current;
+          result = await fetchPage(after, signal, "after");
+          if (signal?.aborted) return;
+          if (
+            after &&
+            resolvedThreadId.current &&
+            result.threadId &&
+            result.threadId !== resolvedThreadId.current
+          ) {
+            cursor.current = undefined;
+            latestRead.current = null;
+            historyRef.current = [];
+            setHistory([]);
+            setOutbox([]);
+            setInfo(null);
+            snapshot.current();
+            result = await fetchPage(undefined, signal);
+            if (signal?.aborted) return;
+            olderAvailable.current = result.hasOlder;
+            setOlder(result.hasOlder);
+          }
+          if (result.threadId) resolvedThreadId.current = result.threadId;
+          if (!after) {
+            olderAvailable.current = result.hasOlder;
+            setOlder(result.hasOlder);
+          }
+          const known = new Set(
+            historyRef.current.map((message) => message.id),
           );
-          const previous =
-            firstMatch === -1 ? [] : current.slice(0, firstMatch);
-          const combined = [...previous, ...result.messages];
-          historyRef.current = combined;
-          setHistory(combined);
-          if (!previous.length) setOlder(result.hasOlder);
+          const incoming = result.messages.filter(
+            (message) => !known.has(message.id),
+          );
+          if (incoming.length) {
+            historyRef.current = [...historyRef.current, ...incoming].sort(
+              (a, b) =>
+                a.created_at.localeCompare(b.created_at) ||
+                a.id.localeCompare(b.id),
+            );
+            setHistory(historyRef.current);
+          }
+          cursor.current = result.messages.at(-1) ?? cursor.current;
+          pages += 1;
+        } while (result.hasNewer && pages < 4);
+
+        if (signal?.aborted) return;
+        if (historyRef.current !== current) {
+          const confirmed = new Set(
+            historyRef.current.map((message) => message.id),
+          );
+          setOutbox((items) => items.filter((item) => !confirmed.has(item.id)));
         }
-        const confirmed = new Set(result.messages.map((message) => message.id));
-        setOutbox((items) => items.filter((item) => !confirmed.has(item.id)));
-        setInfo(result);
+        const metadata = {
+          ...result,
+          messages: [],
+          hasOlder: olderAvailable.current,
+        };
+        setInfo(metadata);
+        snapshot.current({
+          data: {
+            ...metadata,
+            messages: historyRef.current.slice(-80),
+            hasOlder: olderAvailable.current || historyRef.current.length > 80,
+          },
+          cursor: cursor.current,
+          at: Date.now(),
+        });
         setError("");
         setNext(actions.current.nextUnread?.());
-        if (!changes) void markVisible();
+        void markVisible();
       } catch (caught) {
         if (signal?.aborted) return;
         if (caught instanceof ThreadAccessError) {
+          snapshot.current();
+          cursor.current = undefined;
+          resolvedThreadId.current = undefined;
           setInfo(null);
           historyRef.current = [];
           setHistory([]);
+          setOutbox([]);
           setOlder(false);
         }
         setError(
@@ -309,6 +386,7 @@ export function ChatThread({
         ...historyRef.current,
       ];
       setHistory(historyRef.current);
+      olderAvailable.current = result.hasOlder;
       setOlder(result.hasOlder);
     } catch (caught) {
       notify(
@@ -334,9 +412,13 @@ export function ChatThread({
         : [...items, item],
     );
     try {
-      const data = await chatAction(target, "send", item.id, item.body);
+      const data = await chatAction(
+        { ...target, threadId: resolvedThreadId.current ?? target.threadId },
+        "send",
+        item.id,
+        item.body,
+      );
       const saved = data.message as Message;
-      historyGeneration.current++;
       if (!historyRef.current.some((message) => message.id === saved.id)) {
         historyRef.current = [...historyRef.current, saved].sort(
           (a, b) =>
@@ -397,17 +479,30 @@ export function ChatThread({
             </Button>
           )}
         </div>
+        {(request || target.requestInfo?.code) && (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
+            <span>
+              Request #{request?.request_code ?? target.requestInfo?.code}
+            </span>
+            {target.requestInfo?.partnerName && (
+              <span>· {target.requestInfo.partnerName}</span>
+            )}
+            {request ? (
+              <StatusBadge status={request.status} />
+            ) : (
+              target.requestInfo?.status && (
+                <StatusBadge status={target.requestInfo.status} />
+              )
+            )}
+            {request && (
+              <span className="capitalize">
+                {formatStatus(request.request_type)}
+              </span>
+            )}
+          </div>
+        )}
         {request && (
           <>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
-              <span>
-                Request #{request.request_code} ·{" "}
-                <span className="capitalize">
-                  {formatStatus(request.request_type)}
-                </span>
-              </span>
-              <StatusBadge status={request.status} />
-            </div>
             <div className="flex flex-wrap items-center gap-3 text-xs font-medium text-[var(--brand-dark)]">
               <a
                 href={request.placement_page_url}

@@ -77,7 +77,10 @@ async function assignedAdmin(db: Context["db"]) {
 async function directAccess(ctx: Context, peerId: string) {
   const admin = await assignedAdmin(ctx.db);
   if (!admin) throw new ChatError("Direct chat needs an assigned admin.", 409);
-  if (ctx.profile.role === "partner" && peerId === admin.id) {
+  if (
+    ctx.profile.role === "partner" &&
+    (peerId === admin.id || peerId === "assigned")
+  ) {
     return {
       adminId: admin.id as string,
       partnerId: ctx.user.id,
@@ -153,6 +156,8 @@ async function threadQuery(ctx: Context, thread: Thread) {
         .eq("admin_id", pair.adminId)
         .eq("partner_id", pair.partnerId),
       details: {
+        threadId:
+          ctx.profile.role === "partner" ? pair.adminId : pair.partnerId,
         title: pair.peerName,
         avatar_url: pair.avatar_url,
         canWrite: true,
@@ -239,33 +244,56 @@ export async function GET(request: Request) {
       return NextResponse.json({ contacts: data ?? [], isAdmin: true });
     }
 
-    const thread = threadSchema.safeParse({
+    const directAssigned =
+      params.get("kind") === "direct" && params.get("threadId") === "assigned";
+    const parsedThread = threadSchema.safeParse({
       kind: params.get("kind"),
       threadId: params.get("threadId"),
     });
-    if (!thread.success) throw new ChatError("Choose a conversation.", 400);
+    if (directAssigned && ctx.profile.role !== "partner")
+      throw new ChatError("Choose a partner to open a direct chat.", 403);
+    const thread = directAssigned
+      ? { kind: "direct" as const, threadId: "assigned" }
+      : parsedThread.data;
+    if (!thread) throw new ChatError("Choose a conversation.", 400);
     const wantsOlder = params.has("beforeAt") || params.has("beforeId");
     const before = cursorSchema.safeParse({
       at: params.get("beforeAt"),
       id: params.get("beforeId"),
     });
-    if (wantsOlder && !before.success)
+    const wantsNewer = params.has("afterAt") || params.has("afterId");
+    const newer = cursorSchema.safeParse({
+      at: params.get("afterAt"),
+      id: params.get("afterId"),
+    });
+    if (
+      (wantsOlder && !before.success) ||
+      (wantsNewer && !newer.success) ||
+      (wantsOlder && wantsNewer)
+    )
       throw new ChatError("Invalid message cursor.", 400);
-    const { query, details } = await threadQuery(ctx, thread.data);
+    const { query, details } = await threadQuery(ctx, thread);
     if (before.success) {
       const { at, id } = before.data;
       query.or(`created_at.lt.${at},and(created_at.eq.${at},id.lt.${id})`);
     }
+    if (newer.success) {
+      const { at, id } = newer.data;
+      query.or(`created_at.gt.${at},and(created_at.eq.${at},id.gt.${id})`);
+    }
     const { data, error } = await query
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false })
+      .order("created_at", { ascending: wantsNewer })
+      .order("id", { ascending: wantsNewer })
       .limit(pageSize + 1);
     if (error) throw error;
     const rows = data ?? [];
     return NextResponse.json({
       ...details,
-      messages: rows.slice(0, pageSize).reverse(),
-      hasOlder: rows.length > pageSize,
+      messages: wantsNewer
+        ? rows.slice(0, pageSize)
+        : rows.slice(0, pageSize).reverse(),
+      hasOlder: !wantsNewer && rows.length > pageSize,
+      ...(wantsNewer ? { hasNewer: rows.length > pageSize } : {}),
       userId: ctx.user.id,
     });
   } catch (caught) {

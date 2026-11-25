@@ -42,10 +42,19 @@ export default async function Dashboard() {
   if (partnershipError) throw new Error(partnershipError.message);
   const rows = partnerships ?? [];
   const ids = rows.map((row) => row.id);
+  const permission = adminView
+    ? null
+    : await db
+        .from("partner_permissions")
+        .select("view_requests")
+        .eq("partner_id", user.id)
+        .maybeSingle();
+  if (permission?.error) throw new Error(permission.error.message);
+  const canViewRequests = permission?.data?.view_requests !== false;
   const requestFields =
     "id,partnership_id,sender_id,receiver_id,partner_id,status,anchor_text,placement_page_url,deadline_at,first_viewed_at,was_overdue,created_at,request_type";
   async function loadRequests() {
-    if (!ids.length) return { data: [], error: null };
+    if (!ids.length || !canViewRequests) return { data: [], error: null };
     const result = await db
       .from("requests")
       .select(
@@ -54,7 +63,7 @@ export default async function Dashboard() {
       .in("partnership_id", ids)
       .neq("status", "cancelled")
       .order("created_at", { ascending: false })
-      .limit(200);
+      .limit(8);
     if (
       !missingColumn(result.error, "import_key") &&
       !missingColumn(result.error, "import_date_unknown") &&
@@ -70,7 +79,7 @@ export default async function Dashboard() {
       .in("partnership_id", ids)
       .neq("status", "cancelled")
       .order("created_at", { ascending: false })
-      .limit(200);
+      .limit(8);
     return {
       data:
         legacy.data?.map((row) => ({
@@ -86,10 +95,14 @@ export default async function Dashboard() {
 
   const [
     { data: requests, error: requestsError },
+    { data: requestCounts, error: totalsError },
     { count: activePartnerCount, error: countError },
     { data: deletedPartners, error: deletedPartnersError },
   ] = await Promise.all([
     loadRequests(),
+    ids.length && canViewRequests
+      ? db.rpc("collabio_dashboard_request_totals", { p_viewer: user.id })
+      : Promise.resolve({ data: [], error: null }),
     adminView
       ? db
           .from("profiles")
@@ -102,44 +115,36 @@ export default async function Dashboard() {
       : Promise.resolve({ data: [], error: null }),
   ]);
   if (requestsError) throw new Error(requestsError.message);
+  if (totalsError) throw new Error(totalsError.message);
   if (countError) throw new Error(countError.message);
   if (
     deletedPartnersError &&
     !missingColumn(deletedPartnersError, "deleted_at")
   )
     throw new Error(deletedPartnersError.message);
-  const all = (requests ?? []).filter((row) => row.status !== "cancelled");
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const receivedToday = all.filter(
-    (row) =>
-      !row.import_date_unknown &&
-      row.receiver_id === user.id &&
-      new Date(row.created_at) >= today,
-  ).length;
-  const sentToday = all.filter(
-    (row) =>
-      !row.import_date_unknown &&
-      row.sender_id === user.id &&
-      new Date(row.created_at) >= today,
-  ).length;
-  const awaitingReview = all.filter(
-    (row) =>
-      row.receiver_id === user.id &&
-      !row.import_key &&
-      !row.first_viewed_at &&
-      row.status === "new_request",
-  ).length;
-  const overdue = all.filter(
-    (row) =>
-      row.was_overdue ||
-      row.status === "overdue" ||
-      (!row.import_key &&
-        new Date(row.deadline_at) < new Date() &&
-        !row.first_viewed_at),
-  ).length;
-  const live = all.filter((row) => row.status === "live").length;
-  const recent = all.slice(0, 8);
+  type DashboardCount = {
+    partnership_id: string;
+    total: number;
+    live: number;
+    sent: number;
+    received: number;
+    overdue: number;
+    awaiting_review: number;
+    received_today: number;
+    sent_today: number;
+  };
+  const counts: DashboardCount[] = requestCounts ?? [];
+  const countsByPartner = new Map(
+    counts.map((row) => [row.partnership_id, row]),
+  );
+  const sum = (key: Exclude<keyof DashboardCount, "partnership_id">) =>
+    counts.reduce((total, row) => total + Number(row[key] ?? 0), 0);
+  const receivedToday = sum("received_today");
+  const sentToday = sum("sent_today");
+  const awaitingReview = sum("awaiting_review");
+  const overdue = sum("overdue");
+  const live = sum("live");
+  const recent = (requests ?? []).filter((row) => row.status !== "cancelled");
   const deletedIds = new Set(deletedPartners?.map((partner) => partner.id));
   const partnerStats = rows
     .filter(
@@ -151,24 +156,14 @@ export default async function Dashboard() {
         partnership.user_a_id === user.id
           ? partnership.user_b_id
           : partnership.user_a_id;
-      const count = all.filter(
-        (row) => row.partnership_id === partnership.id,
-      ).length;
-      const inbound = all.filter(
-        (row) =>
-          row.partnership_id === partnership.id && row.receiver_id === user.id,
-      ).length;
-      const outbound = all.filter(
-        (row) =>
-          row.partnership_id === partnership.id && row.sender_id === user.id,
-      ).length;
+      const stats = countsByPartner.get(partnership.id);
       return {
         id: partnership.id,
         name: partnership.name,
         counterpartId,
-        count,
-        inbound,
-        outbound,
+        count: stats?.total ?? 0,
+        inbound: stats?.received ?? 0,
+        outbound: stats?.sent ?? 0,
       };
     });
   const profileIds = [
@@ -193,7 +188,7 @@ export default async function Dashboard() {
         },
         {
           label: "Total Requests",
-          value: all.length,
+          value: sum("total"),
           icon: Inbox,
           color: "text-[var(--brand-dark)]",
         },
@@ -213,13 +208,13 @@ export default async function Dashboard() {
     : [
         {
           label: "Requests Received",
-          value: all.filter((row) => row.receiver_id === user.id).length,
+          value: sum("received"),
           icon: Inbox,
           color: "text-[var(--brand-dark)]",
         },
         {
           label: "Requests Sent",
-          value: all.filter((row) => row.sender_id === user.id).length,
+          value: sum("sent"),
           icon: Send,
           color: "text-[var(--brand-dark)]",
         },

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useChat, type ChatTarget } from "@/components/chat/chat-drawer";
+import { useChat, type ChatTarget } from "@/components/chat/chat-context";
 import { requestLabel } from "@/lib/request-content";
 import { requestChatTitle } from "@/components/chat/chat-thread";
 
@@ -10,6 +10,11 @@ type SourceRow = {
   placement_page_url: string;
   anchor_text: string | null;
   request_type?: string;
+  request_code?: number;
+  status?: string;
+  isReceiver?: boolean;
+  sender?: { full_name: string } | null;
+  receiver?: { full_name: string } | null;
 };
 
 export function useRequestChat(rows: SourceRow[]) {
@@ -89,6 +94,11 @@ export function useRequestChat(rows: SourceRow[]) {
       kind: "request",
       threadId: row.id,
       title: requestChatTitle(row.placement_page_url, requestLabel(row)),
+      requestInfo: {
+        code: row.request_code,
+        status: row.status,
+        partnerName: (row.isReceiver ? row.sender : row.receiver)?.full_name,
+      },
       onRead: (id) => {
         readVersion.current.set(id, Date.now());
         currentCounts.current = { ...currentCounts.current, [id]: 0 };

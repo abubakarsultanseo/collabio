@@ -7,6 +7,7 @@ export type ChatTarget = {
   threadId: string;
   title?: string;
   avatarUrl?: string | null;
+  requestInfo?: { code?: number; status?: string; partnerName?: string };
   onRead?: (id: string) => void;
   nextUnread?: () => ChatTarget | undefined;
 };

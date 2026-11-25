@@ -2,9 +2,9 @@
 import { useRequestChat } from "@/components/chat/use-request-chat";
 import {
   InlineStatus,
-  RequestDetails,
   placementDomain,
 } from "@/components/requests/request-tools";
+import RequestDetails from "@/components/requests/request-details-panel";
 import { EmptyState } from "@/components/app/empty-state";
 import {
   RequestContentFields,

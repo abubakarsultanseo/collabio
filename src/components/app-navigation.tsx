@@ -29,7 +29,10 @@ function NavLink({
   onClick?: () => void;
 }) {
   const Icon = item.icon;
-  const selected = isActivePage(path, item.href);
+  const selected =
+    item.label === "Requests"
+      ? ["/requests/inbox", "/requests/sent"].includes(path)
+      : isActivePage(path, item.href);
 
   return (
     <Link
@@ -105,6 +108,11 @@ export default function AppNavigation({ isAdmin }: { isAdmin: boolean }) {
   const workspaceItems = workspaceNav(isAdmin).filter(
     (item) => item.href !== "/notifications" && item.href !== "/messages",
   );
+  const desktopItems = workspaceItems
+    .filter((item) => item.href !== "/requests/sent")
+    .map((item) =>
+      item.href === "/requests/inbox" ? { ...item, label: "Requests" } : item,
+    );
   const overflow = workspaceItems.filter((item) => !item.mobileLabel);
   const moreActive = [...overflow, ...(isAdmin ? adminItems : [])].some(
     (item) => isActivePage(path, item.href),
@@ -134,7 +142,7 @@ export default function AppNavigation({ isAdmin }: { isAdmin: boolean }) {
           <Brand />
         </Link>
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pb-4">
-          <Section title="Workspace" items={workspaceItems} path={path} />
+          <Section title="Workspace" items={desktopItems} path={path} />
           {isAdmin && (
             <Section title="Administration" items={adminItems} path={path} />
           )}
@@ -146,7 +154,7 @@ export default function AppNavigation({ isAdmin }: { isAdmin: boolean }) {
 
       <nav
         aria-label="Primary mobile navigation"
-        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 gap-1 border-t border-[var(--border)] bg-[var(--card)] px-2 pt-1 pb-[max(env(safe-area-inset-bottom),0.25rem)] lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 gap-1 border-t border-[var(--border)] bg-[var(--card)] px-2 pt-1 pb-[max(env(safe-area-inset-bottom),0.25rem)] lg:hidden"
       >
         {workspaceItems
           .filter((item) => item.mobileLabel)

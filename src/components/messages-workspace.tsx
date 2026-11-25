@@ -20,9 +20,11 @@ type Contact = {
 export default function MessagesWorkspace({
   requestId,
   compact = false,
+  assignedPartner = false,
 }: {
   requestId?: string;
   compact?: boolean;
+  assignedPartner?: boolean;
 }) {
   const { open, active } = useChat();
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -99,10 +101,17 @@ export default function MessagesWorkspace({
     if (requestId) {
       openedInitial.current = true;
       open({ kind: "request", threadId: requestId });
+    } else if (assignedPartner) {
+      open({
+        kind: "direct",
+        threadId: "assigned",
+        title: "Chat with Abubakar",
+      });
     }
-  }, [open, requestId]);
+  }, [open, requestId, assignedPartner]);
 
   useEffect(() => {
+    if (assignedPartner) return;
     const controller = new AbortController();
     const tick = () => void load(controller.signal);
     tick();
@@ -113,7 +122,7 @@ export default function MessagesWorkspace({
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", tick);
     };
-  }, [load]);
+  }, [load, assignedPartner]);
 
   const visible = contacts.filter((contact) =>
     contact.name.toLowerCase().includes(search.trim().toLowerCase()),
@@ -134,7 +143,21 @@ export default function MessagesWorkspace({
           </p>
         </header>
       )}
-      {error ? (
+      {assignedPartner ? (
+        <section className="os-card p-5">
+          <Button
+            onClick={() =>
+              open({
+                kind: "direct",
+                threadId: "assigned",
+                title: "Chat with Abubakar",
+              })
+            }
+          >
+            <MessageSquare size={16} aria-hidden /> Chat with Abubakar
+          </Button>
+        </section>
+      ) : error ? (
         <section className="os-card p-5" role="alert">
           <p className="text-sm">{error}</p>
           <Button

@@ -121,3 +121,13 @@ Apply `supabase/migrations/0011_partner_balance_and_deletion.sql` after 0010 and
 ### Separate numbering for Sent and Received
 
 Apply `supabase/migrations/0012_directional_request_numbering.sql` after 0011 and before deploying this update. Existing requests are renumbered from #1 within each sender → receiver pair. For example, your first request to Andy and Andy's first request to you are each #1. Every other partner has their own two sequences. Existing request URLs and history stay attached to the same requests.
+
+If SQL Editor reports that `requests_partner_number_unique` is missing, replace the entire previous 0012 query with the corrected migration in this repository and run it. The corrected file handles a missing legacy constraint and can be rerun without resetting directional numbers.
+
+
+### Faster requests and chat
+
+1. Apply the corrected `0012_directional_request_numbering.sql` if it has not run yet. Then apply `supabase/migrations/0013_dashboard_request_totals.sql` before deploying this version.
+2. Open Received and Sent under **Requests**. The first page contains lightweight rows. Opening **View** or **Edit** loads the full request. The filter menu includes saved filters and Excel export. Check that separate directional request numbers and partner permissions are preserved.
+3. As a partner, open direct chat and confirm it opens your assigned admin’s thread. Reopen a recently viewed thread and confirm the cached conversation appears while new messages sync. As an admin, confirm the partner contact list still works. Test thread permissions with two partner accounts.
+4. Verify dashboard totals against more than 200 requests. The recent list is limited to eight entries while the totals count the whole authorized scope.

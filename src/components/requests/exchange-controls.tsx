@@ -110,10 +110,11 @@ export function ExchangeBalance({
   const hasPreviousBalance =
     previousBalance.giveDue > 0 || previousBalance.receiveDue > 0;
   return (
-    <section className="os-card space-y-3 p-4" aria-label="Exchange balance">
-      <h2 className="font-semibold">
-        Exchange balance with {overview.partnerName}
-      </h2>
+    <details className="os-card space-y-3 p-4" aria-label="Exchange balance">
+      <summary className="cursor-pointer text-sm font-semibold">
+        Exchange balance · You owe {balance.giveDue} · {overview.partnerName}{" "}
+        owes {balance.receiveDue}
+      </summary>
       <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
         {[
           ["Links you gave", balance.given],
@@ -165,7 +166,7 @@ export function ExchangeBalance({
           </ul>
         </details>
       )}
-    </section>
+    </details>
   );
 }
 

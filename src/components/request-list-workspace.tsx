@@ -1,5 +1,8 @@
 "use client";
 import { useToast } from "@/components/app/toast";
+import Link from "next/link";
+import dynamic from "next/dynamic";
+import * as Menu from "@radix-ui/react-dropdown-menu";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { StatusBadge, formatStatus } from "@/components/status-badge";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -10,6 +13,7 @@ import {
   FileSpreadsheet,
   Inbox,
   MessageSquare,
+  Ellipsis,
   Pencil,
   Search,
   SlidersHorizontal,
@@ -20,20 +24,11 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import {
-  RequestContentFields,
-  requestFormBody,
-} from "@/components/requests/request-content-fields";
-import {
-  requestLabel,
-  requestTypes,
-  type RequestContent,
-} from "@/lib/request-content";
+import { requestLabel, requestTypes } from "@/lib/request-content";
 import { EmptyState } from "@/components/app/empty-state";
 import {
   InlineStatus,
   placementDomain,
-  RequestDetails,
 } from "@/components/requests/request-tools";
 import {
   requestStatuses,
@@ -43,38 +38,21 @@ import {
 } from "@/lib/request-statuses";
 import {
   ExchangeBalance,
-  ExchangeFields,
   useExchangeOverview,
   refreshExchangeOverview,
 } from "@/components/requests/exchange-controls";
 import { cn } from "@/lib/utils";
 
-type Row = RequestContent & {
-  id: string;
-  request_code: number;
-  partnership_id: string;
-  deal_id?: string | null;
-  sender_id: string;
-  receiver_id: string;
-  partner_id: string;
-  direction: string;
-  notes: string | null;
-  status: string;
-  canManage?: boolean;
-  canChangeStatus?: boolean;
-  rejection_reason?: string | null;
-  first_viewed_at: string | null;
-  deadline_at: string;
-  was_overdue: boolean;
-  import_key?: string | null;
-  isReceiver?: boolean;
-  created_at: string;
-  sender: { full_name: string; email: string } | null;
-  receiver: { full_name: string; email: string } | null;
-  workspace: { name: string } | null;
-};
-type Cursor = { at: string; id: string };
-type Workspace = { id: string; name: string; counterpart_name?: string };
+import {
+  requestCacheDuration,
+  saveRequestPage,
+  useRequestListCache,
+  type Cursor,
+  type InitialRequestList,
+  type RequestRow as Row,
+  type Workspace,
+} from "@/components/requests/request-list-cache";
+
 type Filters = {
   type: string;
   direction: string;
@@ -114,80 +92,81 @@ function displayDate(value: string) {
   return new Date(value).toLocaleString("en-PK", { timeZone: "Asia/Karachi" });
 }
 
-function EditRequestForm({
-  row,
-  onSave,
-  onSaveExchange,
-  disabled,
-}: {
-  row: Row;
-  onSave: (form: HTMLFormElement) => void;
-  onSaveExchange: (dealId: string) => void;
-  disabled: boolean;
-}) {
-  const exchange = useExchangeOverview(row.partnership_id);
-  return (
-    <div className="space-y-3">
-      <form
-        className="grid gap-3 rounded-xl border border-[var(--border)] p-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSaveExchange(
-            String(new FormData(event.currentTarget).get("dealId") ?? ""),
-          );
-        }}
+const RequestDetails = dynamic(
+  () => import("@/components/requests/request-details-panel"),
+  {
+    loading: () => (
+      <p
+        role="status"
+        className="fixed bottom-4 right-4 z-50 rounded-lg bg-[var(--card)] p-4 text-sm shadow-lg"
       >
-        <ExchangeFields
-          edit
-          overview={exchange?.overview}
-          currentDealId={row.deal_id}
-        />
-        <Button
-          type="submit"
-          variant="outline"
-          disabled={disabled || !exchange?.overview}
-          className="justify-self-start"
-        >
-          Save linked exchange
-        </Button>
-      </form>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSave(event.currentTarget);
-        }}
-        className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-4 md:grid-cols-2"
-      >
-        <RequestContentFields row={row} />
-        <Button type="submit" disabled={disabled} className="md:col-span-2">
-          Save request
-        </Button>
-      </form>
-    </div>
-  );
-}
+        Opening request…
+      </p>
+    ),
+  },
+);
+const EditRequestForm = dynamic(
+  () => import("@/components/requests/edit-request-form"),
+  {
+    loading: () => (
+      <p role="status" className="text-sm text-[var(--muted)]">
+        Loading editor…
+      </p>
+    ),
+  },
+);
+
 export default function RequestListWorkspace({
   scope,
   title,
   initialRequestId,
+  initial,
 }: {
   scope: "inbox" | "sent" | "pending" | "overdue";
   title: string;
   initialRequestId?: string;
+  initial?: InitialRequestList;
 }) {
   const notify = useToast();
+  const cache = useRequestListCache();
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
-  const [rows, setRows] = useState<Row[]>([]);
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [rows, setRows] = useState<Row[]>(initial?.page?.requests ?? []);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>(
+    cache.workspaces ?? [],
+  );
+  const [workspacesError, setWorkspacesError] = useState(false);
+  const [workspaceAttempt, setWorkspaceAttempt] = useState(0);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const directionList = scope === "inbox" || scope === "sent";
   const [view, setView] = useState<RequestView>("all");
-  const [filters, setFilters] = useState<Filters>(emptyFilters);
+  const [filters, setFilters] = useState<Filters>({
+    ...emptyFilters,
+    partnershipId: initial?.partnershipId ?? "",
+  });
   const exchange = useExchangeOverview(
     directionList ? filters.partnershipId : "",
   );
-  const matchingRows = rows.filter(
+  const params = new URLSearchParams({
+    scope,
+    view,
+    paged: "1",
+    fields: "summary",
+  });
+  if (search.trim()) params.set("q", search.trim());
+  if (status) params.set("status", status);
+  if (filters.type) params.set("type", filters.type);
+  if (filters.direction) params.set("direction", filters.direction);
+  if (filters.partnershipId) params.set("partnershipId", filters.partnershipId);
+  if (filters.createdFrom) params.set("createdFrom", filters.createdFrom);
+  if (filters.createdTo) params.set("createdTo", filters.createdTo);
+  const queryKey = params.toString();
+  const [loadedKey, setLoadedKey] = useState(initial?.page ? queryKey : "");
+  const matchingRows = (
+    loadedKey === queryKey
+      ? rows
+      : (cache.pages.get(queryKey)?.page.requests ?? [])
+  ).filter(
     (row) =>
       (!filters.partnershipId ||
         row.partnership_id === filters.partnershipId) &&
@@ -205,10 +184,20 @@ export default function RequestListWorkspace({
   const [presets, setPresets] = useState<Preset[]>([]);
   const [presetName, setPresetName] = useState("");
   const [presetOpen, setPresetOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initial);
+  const [loadError, setLoadError] = useState(initial?.error ?? "");
   const [paging, setPaging] = useState(false);
-  const [nextPage, setNextPage] = useState<Cursor | null>(null);
-  const latestLoad = useRef(0);
+  const [nextPage, setNextPage] = useState<Cursor | null>(
+    initial?.page?.nextPage ?? null,
+  );
+  const listRequest = useRef<AbortController | null>(null);
+  const detailRequest = useRef<AbortController | null>(null);
+  const [opening, setOpening] = useState<{
+    row: Row;
+    mode: "view" | "note" | "edit";
+    error?: string;
+  } | null>(null);
+  const firstList = useRef(initial);
   const mutation = useRef(false);
   const marking = useRef(new Set<string>());
   const recentEdits = useRef(new Map<string, Partial<Row> | null>());
@@ -242,94 +231,157 @@ export default function RequestListWorkspace({
     setFilters(emptyFilters);
   }
   useEffect(() => {
-    if (!directionList && !advanced && !filters.partnershipId) return;
-    fetch("/api/partnerships", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((data) => setWorkspaces(data.partnerships ?? []))
-      .catch(() => {});
-  }, [advanced, directionList, filters.partnershipId]);
+    if (!directionList && !advanced) return;
+    function fetchWorkspaces() {
+      if (cache.workspaces) {
+        setWorkspaces(cache.workspaces);
+        return;
+      }
+      setWorkspacesError(false);
+      cache.workspaceRequest ??= fetch("/api/partnerships", {
+        cache: "no-store",
+      })
+        .then(async (response) => {
+          if (!response.ok) throw new Error("Could not load partners.");
+          const data = await response.json();
+          cache.workspaces = data.partnerships ?? [];
+          return cache.workspaces!;
+        })
+        .finally(() => {
+          cache.workspaceRequest = undefined;
+        });
+      void cache.workspaceRequest.then(setWorkspaces, () =>
+        setWorkspacesError(true),
+      );
+    }
+    fetchWorkspaces();
+  }, [advanced, cache, directionList, workspaceAttempt]);
+
   const load = useCallback(
-    async (cursor?: Cursor) => {
-      const loadId = ++latestLoad.current;
+    async (cursor?: Cursor, force = false) => {
+      listRequest.current?.abort();
+      const controller = new AbortController();
+      listRequest.current = controller;
+      setLoadError("");
       if (cursor) setPaging(true);
       else {
-        setLoading(true);
         setPaging(false);
-        setNextPage(null);
-        recentEdits.current.clear();
+        const saved = cache.pages.get(queryKey);
+        if (saved) {
+          setRows(saved.page.requests);
+          setNextPage(saved.page.nextPage);
+          setLoadedKey(queryKey);
+          if (!force && Date.now() - saved.at < requestCacheDuration) {
+            setLoading(false);
+            return;
+          }
+        } else {
+          setNextPage(null);
+        }
+        setLoading(true);
+      }
+
+      if (!cursor) recentEdits.current.clear();
+      const requestParams = new URLSearchParams(queryKey);
+      if (cursor) {
+        requestParams.set("beforeAt", cursor.at);
+        requestParams.set("beforeId", cursor.id);
       }
       try {
-        const params = new URLSearchParams({ scope, view, paged: "1" });
-        if (cursor) {
-          params.set("beforeAt", cursor.at);
-          params.set("beforeId", cursor.id);
-        }
-        if (search.trim()) params.set("q", search.trim());
-        if (status) params.set("status", status);
-        if (filters.type) params.set("type", filters.type);
-        if (filters.direction) params.set("direction", filters.direction);
-        if (filters.partnershipId)
-          params.set("partnershipId", filters.partnershipId);
-        if (filters.createdFrom) params.set("createdFrom", filters.createdFrom);
-        if (filters.createdTo) params.set("createdTo", filters.createdTo);
-        const response = await fetch(`/api/requests?${params}`, {
+        const response = await fetch(`/api/requests?${requestParams}`, {
           cache: "no-store",
+          signal: controller.signal,
         });
         const data = await response.json();
-        if (!response.ok)
+        if (controller.signal.aborted) return;
+        if (!response.ok) {
+          if ([401, 403].includes(response.status)) {
+            cache.pages.clear();
+            setRows([]);
+            setNextPage(null);
+          }
           throw new Error(data.error ?? "Could not load requests.");
-        if (loadId === latestLoad.current) {
-          const patched = ((data.requests ?? []) as Row[]).flatMap((row) => {
-            const edit = recentEdits.current.get(row.id);
-            return edit === null ? [] : [{ ...row, ...edit }];
-          });
+        }
+        const patched = ((data.requests ?? []) as Row[]).flatMap((row) => {
+          const edit = recentEdits.current.get(row.id);
+          return edit === null ? [] : [{ ...row, ...edit }];
+        });
+        const nextPage = data.nextPage ?? null;
+        if (cursor) {
           setRows((current) => {
-            if (!cursor) return patched;
             const ids = new Set(current.map((row) => row.id));
             return [...current, ...patched.filter((row) => !ids.has(row.id))];
           });
-          setNextPage(data.nextPage ?? null);
+        } else {
+          setRows(patched);
+          saveRequestPage(cache, queryKey, { requests: patched, nextPage });
         }
+        setLoadedKey(queryKey);
+        setNextPage(nextPage);
       } catch (caught) {
-        if (loadId !== latestLoad.current) return;
-        notify(
-          caught instanceof Error ? caught.message : "Could not load requests.",
-          "error",
-        );
+        if (!controller.signal.aborted)
+          setLoadError(
+            caught instanceof Error
+              ? caught.message
+              : "Could not load requests.",
+          );
       } finally {
-        if (loadId === latestLoad.current) {
+        if (!controller.signal.aborted) {
           setLoading(false);
           setPaging(false);
         }
       }
     },
-    [scope, search, status, view, filters, notify],
+    [cache, queryKey],
   );
+
   useEffect(() => {
+    const seeded = firstList.current;
+    firstList.current = undefined;
+    if (
+      seeded?.page &&
+      seeded.at >= cache.invalidatedAt &&
+      !cache.pages.has(queryKey)
+    )
+      cache.pages.set(queryKey, { page: seeded.page, at: seeded.at });
     const changedSearch = previousSearch.current !== search;
     previousSearch.current = search;
-    if (!changedSearch) {
-      void load();
-      return;
-    }
-    const timer = window.setTimeout(() => void load(), 200);
-    return () => window.clearTimeout(timer);
-  }, [load, search]);
+    if (seeded?.error && !cache.pages.has(queryKey)) return;
+    if (!changedSearch) void load();
+    const timer = changedSearch
+      ? window.setTimeout(() => void load(), 200)
+      : undefined;
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      listRequest.current?.abort();
+    };
+  }, [cache, load, queryKey, search]);
 
-  const mergeRow = useCallback((patch: Partial<Row> & { id: string }) => {
-    recentEdits.current.set(patch.id, {
-      ...recentEdits.current.get(patch.id),
-      ...patch,
-    });
-    setRows((current) =>
-      current.map((item) =>
-        item.id === patch.id ? { ...item, ...patch } : item,
-      ),
-    );
-    setEditing((current) =>
-      current?.id === patch.id ? { ...current, ...patch } : current,
-    );
-  }, []);
+  useEffect(() => () => detailRequest.current?.abort(), []);
+
+  const invalidateLists = useCallback(() => {
+    cache.pages.clear();
+    cache.invalidatedAt = Date.now();
+  }, [cache]);
+
+  const mergeRow = useCallback(
+    (patch: Partial<Row> & { id: string }) => {
+      invalidateLists();
+      recentEdits.current.set(patch.id, {
+        ...recentEdits.current.get(patch.id),
+        ...patch,
+      });
+      setRows((current) =>
+        current.map((item) =>
+          item.id === patch.id ? { ...item, ...patch } : item,
+        ),
+      );
+      setEditing((current) =>
+        current?.id === patch.id ? { ...current, ...patch } : current,
+      );
+    },
+    [invalidateLists],
+  );
 
   useEffect(() => {
     function onUpdate(event: Event) {
@@ -416,7 +468,9 @@ export default function RequestListWorkspace({
       const response = await fetch("/api/requests", {
         method: "PATCH",
         ...(form
-          ? requestFormBody(form, { id: row.id })
+          ? (
+              await import("@/components/requests/request-content-fields")
+            ).requestFormBody(form, { id: row.id })
           : {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ id: row.id, ...body }),
@@ -456,6 +510,7 @@ export default function RequestListWorkspace({
       setDeleteTarget(null);
       refreshExchangeOverview();
       notify(`Request #${row.request_code} deleted.`);
+      invalidateLists();
       recentEdits.current.set(row.id, null);
       setRows((current) => current.filter((item) => item.id !== row.id));
     } catch (caught) {
@@ -477,8 +532,7 @@ export default function RequestListWorkspace({
     exportQuery.set("partnershipId", filters.partnershipId);
   if (filters.createdFrom) exportQuery.set("createdFrom", filters.createdFrom);
   if (filters.createdTo) exportQuery.set("createdTo", filters.createdTo);
-  const activeRow =
-    editing && (rows.find((row) => row.id === editing.id) ?? editing);
+  const activeRow = editing;
   const rowAction = "h-auto rounded-md px-2 py-1";
   const overdue = (row: Row) =>
     !["live", "cancelled", "removed", "rejected"].includes(row.status) &&
@@ -488,10 +542,45 @@ export default function RequestListWorkspace({
         new Date(row.deadline_at) < new Date() &&
         !row.first_viewed_at));
 
-  function openRequest(row: Row) {
-    setDetails({ row, mode: "view" });
-    if (row.isReceiver && !row.first_viewed_at)
-      void markSeen(row).catch(() => {});
+  async function openRequest(
+    row: Row,
+    mode: "view" | "note" | "edit" = "view",
+  ) {
+    detailRequest.current?.abort();
+    const controller = new AbortController();
+    detailRequest.current = controller;
+    setOpening({ row, mode });
+    try {
+      const response = await fetch(
+        `/api/requests?${new URLSearchParams({ requestId: row.id })}`,
+        {
+          cache: "no-store",
+          signal: controller.signal,
+        },
+      );
+      const data = await response.json();
+      if (controller.signal.aborted) return;
+      const full = data.requests?.[0] as Row | undefined;
+      if (!response.ok || !full)
+        throw new Error(data.error ?? "This request is unavailable.");
+      setOpening(null);
+      if (mode === "edit" && full.canManage) setEditing(full);
+      else if (mode !== "edit") {
+        setDetails({ row: full, mode });
+        if (mode === "view" && full.isReceiver)
+          void markSeen(full).catch(() => {});
+      }
+    } catch (error) {
+      if (!controller.signal.aborted)
+        setOpening({
+          row,
+          mode,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Could not open the request.",
+        });
+    }
   }
 
   function chatButton(row: Row, className: string) {
@@ -524,44 +613,55 @@ export default function RequestListWorkspace({
           variant="outline"
           size="sm"
           className={rowAction}
-          onClick={() => openRequest(row)}
+          onClick={() => void openRequest(row)}
         >
           <Eye size={12} aria-hidden /> View
         </Button>
         {chatButton(row, "")}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className={rowAction}
-          onClick={() => setDetails({ row, mode: "note" })}
-        >
-          <StickyNote size={12} aria-hidden /> Add note
-        </Button>
-        {row.canManage && (
-          <>
+        <Menu.Root>
+          <Menu.Trigger asChild>
             <Button
-              type="button"
-              variant="outline"
+              variant="ghost"
               size="sm"
               className={rowAction}
-              disabled={busy !== null}
-              onClick={() => setEditing(row)}
+              aria-label={`More actions for request #${row.request_code}`}
             >
-              <Pencil size={12} aria-hidden /> Edit
+              <Ellipsis size={16} aria-hidden />
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className={cn(rowAction, "border-[var(--red)] text-[var(--red)]")}
-              disabled={busy !== null}
-              onClick={() => setDeleteTarget(row)}
+          </Menu.Trigger>
+          <Menu.Portal>
+            <Menu.Content
+              align="end"
+              sideOffset={4}
+              className="z-50 min-w-36 rounded-lg border border-[var(--border)] bg-[var(--card)] p-1 text-sm shadow-lg"
             >
-              <Trash2 size={12} aria-hidden /> Delete
-            </Button>
-          </>
-        )}
+              <Menu.Item
+                className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 outline-none data-[highlighted]:bg-[var(--canvas)]"
+                onSelect={() => void openRequest(row, "note")}
+              >
+                <StickyNote size={14} aria-hidden /> Add note
+              </Menu.Item>
+              {row.canManage && (
+                <>
+                  <Menu.Item
+                    className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 outline-none data-[highlighted]:bg-[var(--canvas)]"
+                    disabled={busy !== null}
+                    onSelect={() => void openRequest(row, "edit")}
+                  >
+                    <Pencil size={14} aria-hidden /> Edit
+                  </Menu.Item>
+                  <Menu.Item
+                    className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-[var(--red)] outline-none data-[highlighted]:bg-[var(--danger-bg)]"
+                    disabled={busy !== null}
+                    onSelect={() => setDeleteTarget(row)}
+                  >
+                    <Trash2 size={14} aria-hidden /> Delete
+                  </Menu.Item>
+                </>
+              )}
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu.Root>
       </div>
     );
   }
@@ -588,20 +688,41 @@ export default function RequestListWorkspace({
     <div className="page-enter mx-auto max-w-7xl space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">{title}</h1>
+          <h1 className="text-2xl font-bold">
+            {directionList ? "Requests" : title}
+          </h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
             Search, review, and update requests shared with your partners.
           </p>
         </div>
-        <a
-          href={`/api/export?${exportQuery}`}
-          className={buttonVariants({ variant: "secondary" })}
-        >
-          <FileSpreadsheet size={17} aria-hidden /> Export Excel
-        </a>
       </header>
 
-      <section className="os-card space-y-4 p-4" aria-label="Request filters">
+      {directionList && (
+        <nav
+          aria-label="Request direction"
+          className="flex gap-5 border-b border-[var(--border)]"
+        >
+          {[
+            { key: "inbox", label: "Received" },
+            { key: "sent", label: "Sent" },
+          ].map((tab) => (
+            <Link
+              key={tab.key}
+              href={`/requests/${tab.key}${filters.partnershipId ? `?partner=${filters.partnershipId}` : ""}`}
+              aria-current={scope === tab.key ? "page" : undefined}
+              className={cn(
+                "border-b-2 px-2 pb-2 text-sm font-semibold",
+                scope === tab.key
+                  ? "border-[var(--brand)] text-[var(--brand-dark)]"
+                  : "border-transparent text-[var(--muted)] hover:text-[var(--text)]",
+              )}
+            >
+              {tab.label}
+            </Link>
+          ))}
+        </nav>
+      )}
+      <section className="os-card space-y-3 p-3" aria-label="Request filters">
         <div className="grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(8rem,12rem)] xl:grid-cols-[minmax(0,1fr)_minmax(8rem,12rem)_auto]">
           <label className="text-sm font-medium">
             Search requests
@@ -620,35 +741,28 @@ export default function RequestListWorkspace({
               />
             </span>
           </label>
-          <label className="text-sm font-medium">
-            Status
-            <Select
-              className="mt-1 capitalize"
-              value={status}
-              onChange={(event) => {
-                const value = event.target.value;
-                setStatus(value);
-                if (directionList && value === "cancelled")
-                  setView("cancelled");
-                else if (
-                  value &&
-                  ((view === "pending" && value === "live") ||
-                    (view === "live" && value !== "live") ||
-                    view === "cancelled")
-                )
-                  setView("all");
-              }}
-            >
-              <option value="">All statuses</option>
-              {requestStatuses
-                .filter((item) => directionList || item !== "cancelled")
-                .map((item) => (
-                  <option key={item} value={item}>
-                    {formatStatus(item)}
+          {directionList ? (
+            <label className="text-sm font-medium">
+              Partner
+              <Select
+                className="mt-1"
+                value={filters.partnershipId}
+                onChange={(event) =>
+                  setFilters((current) => ({
+                    ...current,
+                    partnershipId: event.target.value,
+                  }))
+                }
+              >
+                <option value="">All partners</option>
+                {workspaces.map((party) => (
+                  <option key={party.id} value={party.id}>
+                    {party.counterpart_name ?? party.name}
                   </option>
                 ))}
-            </Select>
-          </label>
+              </Select>
+            </label>
+          ) : null}
           <div className="flex flex-wrap gap-2 sm:col-span-2 xl:col-span-1">
             <Button
               type="button"
@@ -658,42 +772,108 @@ export default function RequestListWorkspace({
               aria-controls="advanced-request-filters"
             >
               <SlidersHorizontal size={16} aria-hidden />{" "}
-              {advanced ? "Hide filters" : "Advanced filters"}
-            </Button>
-            <Button type="button" variant="ghost" onClick={reset}>
-              Reset
+              {advanced ? "Hide filters" : "More filters"}
             </Button>
             <Button
               type="button"
-              variant="outline"
-              onClick={() => setPresetOpen(true)}
+              variant="ghost"
+              onClick={() => void load(undefined, true)}
             >
-              Save filter
+              Refresh
             </Button>
           </div>
         </div>
+        {workspacesError && (
+          <p className="text-sm" role="alert">
+            Could not load partners.{" "}
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setWorkspaceAttempt((value) => value + 1)}
+            >
+              Retry
+            </Button>
+          </p>
+        )}
+        {directionList && (
+          <div
+            className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-3"
+            role="group"
+            aria-label="Request status groups"
+          >
+            {requestViews.map((option) => (
+              <Button
+                type="button"
+                key={option.value}
+                size="sm"
+                aria-pressed={view === option.value}
+                variant={view === option.value ? "default" : "outline"}
+                onClick={() => {
+                  setView(option.value);
+                  setStatus("");
+                }}
+              >
+                {option.label}
+              </Button>
+            ))}
+          </div>
+        )}
         {advanced && (
           <div
             id="advanced-request-filters"
             className="grid gap-3 border-t border-[var(--border)] pt-4 sm:grid-cols-2 xl:grid-cols-5"
           >
-            <label className="text-sm">
-              Workspace
+            <label className="text-sm font-medium">
+              Status
               <Select
-                className="mt-1"
-                value={filters.partnershipId}
-                onChange={(event) =>
-                  setFilters({ ...filters, partnershipId: event.target.value })
-                }
+                className="mt-1 capitalize"
+                value={status}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setStatus(value);
+                  if (directionList && value === "cancelled")
+                    setView("cancelled");
+                  else if (
+                    value &&
+                    ((view === "pending" && value === "live") ||
+                      (view === "live" && value !== "live") ||
+                      view === "cancelled")
+                  )
+                    setView("all");
+                }}
               >
-                <option value="">All workspaces</option>
-                {workspaces.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
+                <option value="">All statuses</option>
+                {requestStatuses
+                  .filter((item) => directionList || item !== "cancelled")
+                  .map((item) => (
+                    <option key={item} value={item}>
+                      {formatStatus(item)}
+                    </option>
+                  ))}
               </Select>
             </label>
+            {!directionList && (
+              <label className="text-sm">
+                Workspace
+                <Select
+                  className="mt-1"
+                  value={filters.partnershipId}
+                  onChange={(event) =>
+                    setFilters({
+                      ...filters,
+                      partnershipId: event.target.value,
+                    })
+                  }
+                >
+                  <option value="">All workspaces</option>
+                  {workspaces.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+            )}
             <label className="text-sm">
               Request type
               <Select
@@ -711,20 +891,22 @@ export default function RequestListWorkspace({
                 ))}
               </Select>
             </label>
-            <label className="text-sm">
-              Direction
-              <Select
-                className="mt-1"
-                value={filters.direction}
-                onChange={(event) =>
-                  setFilters({ ...filters, direction: event.target.value })
-                }
-              >
-                <option value="">Both directions</option>
-                <option value="sent">Sent by me</option>
-                <option value="received">Received by me</option>
-              </Select>
-            </label>
+            {!directionList && (
+              <label className="text-sm">
+                Direction
+                <Select
+                  className="mt-1"
+                  value={filters.direction}
+                  onChange={(event) =>
+                    setFilters({ ...filters, direction: event.target.value })
+                  }
+                >
+                  <option value="">Both directions</option>
+                  <option value="sent">Sent by me</option>
+                  <option value="received">Received by me</option>
+                </Select>
+              </label>
+            )}
             <label className="text-sm">
               Created from
               <Input
@@ -747,9 +929,27 @@ export default function RequestListWorkspace({
                 }
               />
             </label>
+            <div className="flex flex-wrap gap-2 border-t border-[var(--border)] pt-3 sm:col-span-2 xl:col-span-5">
+              <Button type="button" variant="ghost" onClick={reset}>
+                Reset filters
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPresetOpen(true)}
+              >
+                Save filter
+              </Button>
+              <a
+                href={`/api/export?${exportQuery}`}
+                className={buttonVariants({ variant: "secondary" })}
+              >
+                <FileSpreadsheet size={16} aria-hidden /> Export Excel
+              </a>
+            </div>
           </div>
         )}
-        {presets.length > 0 && (
+        {advanced && presets.length > 0 && (
           <ul className="flex flex-wrap gap-2" aria-label="Saved filters">
             {presets.map((preset) => (
               <li
@@ -791,59 +991,6 @@ export default function RequestListWorkspace({
         )}
       </section>
 
-      {directionList && (
-        <section
-          className="os-card space-y-3 p-4"
-          aria-label="Partner and request view"
-        >
-          <div
-            className="flex flex-wrap items-center gap-2"
-            role="group"
-            aria-label="Filter by partner"
-          >
-            {[{ id: "", name: "All partners" }, ...workspaces].map((party) => (
-              <Button
-                key={party.id}
-                type="button"
-                size="sm"
-                aria-pressed={filters.partnershipId === party.id}
-                variant={
-                  filters.partnershipId === party.id ? "default" : "outline"
-                }
-                onClick={() =>
-                  setFilters((current) => ({
-                    ...current,
-                    partnershipId: party.id,
-                  }))
-                }
-              >
-                {party.counterpart_name ?? party.name}
-              </Button>
-            ))}
-          </div>
-          <div
-            className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-3"
-            role="group"
-            aria-label="Request status groups"
-          >
-            {requestViews.map((option) => (
-              <Button
-                type="button"
-                key={option.value}
-                size="sm"
-                aria-pressed={view === option.value}
-                variant={view === option.value ? "default" : "outline"}
-                onClick={() => {
-                  setView(option.value);
-                  setStatus("");
-                }}
-              >
-                {option.label}
-              </Button>
-            ))}
-          </div>
-        </section>
-      )}
       {directionList && filters.partnershipId && (
         <ExchangeBalance
           overview={exchange?.overview}
@@ -852,16 +999,40 @@ export default function RequestListWorkspace({
         />
       )}
 
-      {loading ? (
+      {loadError && (
+        <section
+          role="alert"
+          className="os-card flex items-center justify-between gap-3 p-4 text-sm"
+        >
+          <span>{loadError}</span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void load(undefined, true)}
+          >
+            Retry
+          </Button>
+        </section>
+      )}
+      {loading && matchingRows.length ? (
+        <p role="status" className="text-sm text-[var(--muted)]">
+          Refreshing requests…
+        </p>
+      ) : null}
+      {(loading || loadedKey !== queryKey) &&
+      !matchingRows.length &&
+      !loadError ? (
         <p role="status" className="os-card p-5 text-sm text-[var(--muted)]">
           Loading requests…
         </p>
       ) : matchingRows.length === 0 ? (
-        <EmptyState
-          icon={Inbox}
-          title="No requests match these filters."
-          hint="Try another search, status, or date range."
-        />
+        loadError ? null : (
+          <EmptyState
+            icon={Inbox}
+            title="No requests match these filters."
+            hint="Try another search, status, or date range."
+          />
+        )
       ) : (
         <section className="space-y-2" aria-label="Request results">
           {view !== "cancelled" && (
@@ -877,37 +1048,31 @@ export default function RequestListWorkspace({
             className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]"
           >
             <table className="os-table w-full text-left md:min-w-[890px] text-sm">
-              <thead className="text-xs uppercase tracking-wide text-[var(--muted)]">
+              <thead className="hidden text-xs uppercase tracking-wide text-[var(--muted)] md:table-header-group">
                 <tr>
                   {["Request", "Partner", "Type", "Status", "Actions"].map(
                     (label) => (
-                      <th
-                        key={label}
-                        scope="col"
-                        className={cn(
-                          "px-4 py-3",
-                          label !== "Request" && "hidden md:table-cell",
-                        )}
-                      >
+                      <th key={label} scope="col" className="px-4 py-3">
                         {label}
                       </th>
                     ),
                   )}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[var(--border)]">
+              <tbody className="block divide-y divide-[var(--border)] md:table-row-group">
                 {matchingRows.map((row) => {
                   const counterpart =
-                    (scope === "sent" ? row.receiver : row.sender)?.full_name ??
+                    (row.isReceiver ? row.sender : row.receiver)?.full_name ??
                     "Partner";
                   return (
                     <tr
                       key={row.id}
-                      className={
-                        overdue(row) ? "bg-[var(--danger-bg)]" : undefined
-                      }
+                      className={cn(
+                        "grid grid-cols-[minmax(0,1fr)_auto] md:table-row",
+                        overdue(row) && "bg-[var(--danger-bg)]",
+                      )}
                     >
-                      <td className="px-4 py-3">
+                      <td className="col-span-2 min-w-0 px-4 py-3">
                         <div
                           className="max-w-60 truncate font-semibold"
                           title={placementDomain(row.placement_page_url)}
@@ -921,13 +1086,9 @@ export default function RequestListWorkspace({
                         >
                           {requestLabel(row)}
                         </div>
-                        <div className="mt-3 space-y-2 md:hidden">
-                          <p className="text-xs text-[var(--muted)]">
-                            {counterpart} · {formatStatus(row.request_type)}
-                          </p>
-                          {rowStatus(row)}
-                          {rowActions(row)}
-                        </div>
+                        <p className="mt-1 text-xs text-[var(--muted)] md:hidden">
+                          {counterpart} · {formatStatus(row.request_type)}
+                        </p>
                       </td>
                       <td className="hidden px-4 py-3 md:table-cell">
                         <div className="max-w-32 truncate" title={counterpart}>
@@ -942,10 +1103,10 @@ export default function RequestListWorkspace({
                       <td className="hidden whitespace-nowrap px-4 py-3 capitalize md:table-cell">
                         {formatStatus(row.request_type)}
                       </td>
-                      <td className="hidden px-4 py-3 md:table-cell">
+                      <td className="min-w-0 pb-3 pl-4 md:px-4 md:py-3">
                         {rowStatus(row)}
                       </td>
-                      <td className="hidden px-4 py-3 md:table-cell">
+                      <td className="pb-3 pr-4 md:px-4 md:py-3">
                         {rowActions(row)}
                       </td>
                     </tr>
@@ -957,7 +1118,7 @@ export default function RequestListWorkspace({
         </section>
       )}
 
-      {nextPage && (
+      {nextPage && loadedKey === queryKey && (
         <Button
           type="button"
           variant="secondary"
@@ -1008,6 +1169,39 @@ export default function RequestListWorkspace({
         </DialogContent>
       </Dialog>
 
+      {opening && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              detailRequest.current?.abort();
+              setOpening(null);
+            }
+          }}
+        >
+          <DialogContent
+            placement="side"
+            title={`Request #${opening.row.request_code} · ${placementDomain(opening.row.placement_page_url)}`}
+            description={requestLabel(opening.row)}
+          >
+            {opening.error ? (
+              <div role="alert" className="space-y-3 text-sm">
+                <p>{opening.error}</p>
+                <Button
+                  variant="outline"
+                  onClick={() => void openRequest(opening.row, opening.mode)}
+                >
+                  Retry
+                </Button>
+              </div>
+            ) : (
+              <p role="status" className="text-sm text-[var(--muted)]">
+                Loading request details…
+              </p>
+            )}
+          </DialogContent>
+        </Dialog>
+      )}
       {activeRow && (
         <Dialog
           open
@@ -1018,7 +1212,7 @@ export default function RequestListWorkspace({
           <DialogContent
             title={`Request #${activeRow.request_code}`}
             description={requestLabel(activeRow)}
-            className="max-w-2xl"
+            placement="side"
             closeDisabled={busy === activeRow.id}
           >
             <div className="mb-4 grid gap-3 text-sm sm:grid-cols-2">
@@ -1070,7 +1264,14 @@ export default function RequestListWorkspace({
         <RequestDetails
           key={`${details.row.id}:${details.mode}`}
           mode={details.mode}
-          row={rows.find((row) => row.id === details.row.id) ?? details.row}
+          partnerName={
+            (details.row.isReceiver ? details.row.sender : details.row.receiver)
+              ?.full_name
+          }
+          row={{
+            ...details.row,
+            ...(rows.find((row) => row.id === details.row.id) ?? {}),
+          }}
           onClose={() => setDetails(null)}
         />
       )}

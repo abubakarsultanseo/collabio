@@ -15,6 +15,7 @@ type DialogContentProps = {
   closeDisabled?: boolean;
   initialFocus?: RefObject<HTMLElement | null>;
   className?: string;
+  placement?: "center" | "side";
 };
 
 export function DialogContent({
@@ -24,6 +25,7 @@ export function DialogContent({
   closeDisabled,
   initialFocus,
   className,
+  placement = "center",
 }: DialogContentProps) {
   const previousFocus = useRef<HTMLElement | null>(null);
 
@@ -32,7 +34,10 @@ export function DialogContent({
       <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[#202124]/40 backdrop-blur-[2px]" />
       <DialogPrimitive.Content
         className={cn(
-          "fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[calc(100%_-_2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-xl",
+          "fixed z-50 overflow-y-auto border border-[var(--border)] bg-[var(--card)] p-6 shadow-xl",
+          placement === "side"
+            ? "inset-y-0 right-0 w-full sm:max-w-2xl sm:rounded-l-2xl"
+            : "left-1/2 top-1/2 max-h-[90dvh] w-[calc(100%_-_2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl",
           className,
         )}
         onOpenAutoFocus={(event) => {

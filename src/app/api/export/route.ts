@@ -42,7 +42,8 @@ export async function GET(request: Request) {
     const search = (params.get("q") ?? "")
       .replace(/[,%()\\]/g, " ")
       .trim()
-      .slice(0, 80);
+      .slice(0, 80)
+      .replace(/^#(\d{1,12})$/, "$1");
     const format = params.get("format") === "xlsx" ? "xlsx" : "csv";
     const db = createAdminClient();
     if (profile.role !== "admin") {

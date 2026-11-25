@@ -12,13 +12,14 @@ import {
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type PointerEvent,
   type ReactNode,
 } from "react";
 import { Button } from "@/components/ui/button";
-import { ChatThread } from "@/components/chat/chat-thread";
+import { ChatThread, type ChatSnapshot } from "@/components/chat/chat-thread";
 import { ChatContext, type ChatTarget } from "@/components/chat/chat-context";
 import MessagesWorkspace from "@/components/messages-workspace";
 
@@ -52,6 +53,7 @@ export function ChatHost({
   const trigger = useRef<HTMLElement | null>(null);
   const panel = useRef<HTMLDivElement>(null);
   const drafts = useRef(new Map<string, string>());
+  const snapshots = useRef(new Map<string, ChatSnapshot>());
   const drag = useRef<Drag | null>(null);
   const openPanel = !minimized && (!!active || contacts);
 
@@ -120,6 +122,14 @@ export function ChatHost({
       setMinimized(false);
       return;
     }
+    if (!isAdmin) {
+      open({
+        kind: "direct",
+        threadId: "assigned",
+        title: "Chat with Abubakar",
+      });
+      return;
+    }
     setActive(null);
     setContacts(true);
   }
@@ -178,9 +188,11 @@ export function ChatHost({
     }
   }
 
+  const controls = useMemo(() => ({ open, active }), [open, active]);
   const key = active && `${active.kind}:${active.threadId}`;
+  const cached = key ? snapshots.current.get(key) : undefined;
   return (
-    <ChatContext.Provider value={{ open, active }}>
+    <ChatContext.Provider value={controls}>
       {children}
       {(!openPanel || active?.kind === "request") && (
         <Button
@@ -222,7 +234,7 @@ export function ChatHost({
                   trigger.current.focus();
                 }
               }}
-              className="fixed bottom-4 right-4 z-40 flex h-[min(40rem,calc(100dvh-2rem))] w-[min(27rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl"
+              className="fixed inset-0 z-40 flex h-[100dvh] w-full flex-col overflow-hidden border border-[var(--border)] bg-[var(--card)] shadow-2xl md:inset-auto md:bottom-4 md:right-4 md:h-[min(40rem,calc(100dvh-2rem))] md:w-[min(29rem,calc(100vw-2rem))] md:rounded-2xl"
             >
               <Dialog.Title className="sr-only">
                 {active?.title ||
@@ -340,6 +352,19 @@ export function ChatHost({
                   target={active}
                   open={open}
                   initialDraft={drafts.current.get(key) ?? ""}
+                  initialSnapshot={
+                    cached && Date.now() - cached.at < 60_000
+                      ? cached
+                      : undefined
+                  }
+                  onSnapshot={(snapshot) => {
+                    snapshots.current.delete(key);
+                    if (snapshot) snapshots.current.set(key, snapshot);
+                    if (snapshots.current.size > 20) {
+                      const first = snapshots.current.keys().next().value;
+                      if (first) snapshots.current.delete(first);
+                    }
+                  }}
                   onDraft={(text) => {
                     if (text) drafts.current.set(key, text);
                     else drafts.current.delete(key);
