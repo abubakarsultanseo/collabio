@@ -116,3 +116,8 @@ Apply `supabase/migrations/0011_partner_balance_and_deletion.sql` after 0010 and
 - A Live link counts as given by the workspace member who published it. Previous placements without a tracked ratio are reconciled 1:1. If you published seven and your partner published four, your partner still owes three links. Only Live placements enter this balance.
 - Use **Apply to previous balance (1:1)** in the request form to settle that balance without opening a tracked exchange. The placement counts once it is Live. For a tracked 2:1 exchange, the agreed two return slots still become due after the first link goes Live.
 - In **Team & Invitations → Team members**, an admin can choose **Delete partner** and confirm. This revokes access and pending invitations, stops queued reminders, and hides the account from partner lists. Historical requests remain accessible to admins in the all-partners request views.
+
+
+### Separate numbering for Sent and Received
+
+Apply `supabase/migrations/0012_directional_request_numbering.sql` after 0011 and before deploying this update. Existing requests are renumbered from #1 within each sender → receiver pair. For example, your first request to Andy and Andy's first request to you are each #1. Every other partner has their own two sequences. Existing request URLs and history stay attached to the same requests.

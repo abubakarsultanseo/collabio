@@ -107,7 +107,7 @@ export async function GET(request: Request) {
       db
         .from("tracked_exchange_balances")
         .select(
-          "id,status,side_a_quota,side_b_quota,side_a_live,side_b_live,side_a_due,side_b_due,first_link_side,first_link_live_at,opening_request_number",
+          "id,status,side_a_quota,side_b_quota,side_a_live,side_b_live,side_a_due,side_b_due,first_link_side,first_link_live_at,opening_request_number,opening_request_sender_id",
         )
         .eq("partnership_id", id.data)
         .neq("status", "cancelled")
@@ -155,9 +155,15 @@ export async function GET(request: Request) {
               : counts?.side_a_previous_due) ?? 0,
         },
         exchanges: (progress.data ?? []).map(
-          ({ opening_request_number, ...exchange }) => ({
+          ({
+            opening_request_number,
+            opening_request_sender_id,
+            ...exchange
+          }) => ({
             ...exchange,
             openingRequestNumber: opening_request_number,
+            openingRequestSentByYou:
+              opening_request_sender_id === state.user.id,
           }),
         ),
       },

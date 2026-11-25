@@ -23,7 +23,8 @@ export type Exchange = {
   side_b_due: number;
   first_link_side: ExchangeSide;
   first_link_live_at: string | null;
-  openingRequestNumber?: number;
+  openingRequestNumber?: number | null;
+  openingRequestSentByYou: boolean;
 };
 
 export type ExchangeOverview = {

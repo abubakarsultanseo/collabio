@@ -84,7 +84,7 @@ function toViewer(exchange: Exchange, overview: ExchangeOverview) {
 function exchangeLabel(exchange: Exchange, overview: ExchangeOverview) {
   const { ratio } = toViewer(exchange, overview);
   return exchange.openingRequestNumber
-    ? `Request #${exchange.openingRequestNumber} · ${ratio}`
+    ? `${exchange.openingRequestSentByYou ? "Sent" : "Received"} request #${exchange.openingRequestNumber} · ${ratio}`
     : `Link exchange · ${ratio}`;
 }
 
