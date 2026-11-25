@@ -2,10 +2,14 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
+import {
+  importFormats,
+  importTemplates,
+  type ImportFormat,
+} from "@/lib/request-import-templates";
 import { Input } from "@/components/ui/input";
 
-const header =
-  "direction,placement,anchor,target,type,status,created,notes,instructions,reason,updated,viewed,deadline,source_id";
 type Preview = {
   name: string;
   email: string;
@@ -13,6 +17,7 @@ type Preview = {
   sent: number;
   received: number;
   duplicates: number;
+  unknownDates: number;
   issues: { row: number; message: string }[];
   sample: {
     line: number;
@@ -27,6 +32,9 @@ type Preview = {
 export function ImportRequests() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
+  const [format, setFormat] = useState<ImportFormat>("collab");
+  const [direction, setDirection] = useState<"" | "sent" | "received">("");
+  const [blockName, setBlockName] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [error, setError] = useState("");
@@ -42,7 +50,15 @@ export function ImportRequests() {
       const response = await fetch("/api/requests/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, name, csv: await file.text(), action }),
+        body: JSON.stringify({
+          email,
+          name,
+          csv: await file.text(),
+          action,
+          format,
+          direction: direction || undefined,
+          blockName,
+        }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
@@ -63,8 +79,8 @@ export function ImportRequests() {
       <header>
         <h1 className="text-2xl font-bold">Import historical requests</h1>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          One CSV per partner. Use Sent for requests you sent and Received for
-          requests the partner sent.
+          Upload a CSV from either sheet layout. Import one partner block or
+          sender tab at a time.
         </p>
       </header>
       <form
@@ -104,6 +120,58 @@ export function ImportRequests() {
           </label>
         </div>
         <label className="text-sm">
+          Sheet layout
+          <Select
+            className="mt-1"
+            value={format}
+            disabled={busy}
+            onChange={(event) => {
+              setFormat(event.target.value as ImportFormat);
+              setPreview(null);
+            }}
+          >
+            {importFormats.map((key) => (
+              <option key={key} value={key}>
+                {importTemplates[key].label}
+              </option>
+            ))}
+          </Select>
+        </label>
+        {format !== "standard" && (
+          <label className="text-sm">
+            Requests in this block or tab *
+            <Select
+              className="mt-1"
+              required
+              value={direction}
+              disabled={busy}
+              onChange={(event) => {
+                setDirection(event.target.value as typeof direction);
+                setPreview(null);
+              }}
+            >
+              <option value="">Choose a direction</option>
+              <option value="sent">Sent by me</option>
+              <option value="received">Received from partner</option>
+            </Select>
+          </label>
+        )}
+        {format === "collab" && (
+          <label className="text-sm">
+            Partner heading (exactly as shown in the sheet)
+            <Input
+              className="mt-1"
+              value={blockName}
+              disabled={busy}
+              placeholder="e.g. Justin Hall"
+              onChange={(event) => {
+                setBlockName(event.target.value);
+                setPreview(null);
+              }}
+            />
+          </label>
+        )}
+        <label className="text-sm">
           Request CSV
           <Input
             type="file"
@@ -122,17 +190,17 @@ export function ImportRequests() {
             {busy ? "Working…" : "Preview import"}
           </Button>
           <a
-            download="collabio-import-template.csv"
-            href={`data:text/csv;charset=utf-8,${encodeURIComponent(header + "\r\n")}`}
+            download={`collabio-${format}-import-template.csv`}
+            href={`data:text/csv;charset=utf-8,${encodeURIComponent(importTemplates[format].csv)}`}
             className="text-sm text-[var(--brand-dark)] underline"
           >
-            Download CSV template
+            Download this layout’s CSV template
           </a>
         </div>
         <p className="text-xs text-[var(--muted)]">
-          Use YYYY-MM-DD or an ISO timestamp with timezone. Rejected rows need
-          the original reason. Use the original row ID in source_id when
-          available.
+          Leave unknown dates empty. For document chips, paste the full document
+          URL into a Document URL column. Rejected rows need the original
+          reason.
         </p>
       </form>
       {error && (
@@ -159,6 +227,18 @@ export function ImportRequests() {
                 {preview.sent} sent · {preview.received} received ·{" "}
                 {preview.duplicates} existing duplicates skipped
               </p>
+              {preview.unknownDates > 0 && (
+                <p className="text-sm text-[var(--muted)]">
+                  {preview.unknownDates} rows have no original date. Collabio
+                  will show “Original date unavailable”.
+                </p>
+              )}
+              {format !== "standard" && (
+                <p className="text-sm text-[var(--muted)]">
+                  Requested and New Req map to New Request. Not Live and Want to
+                  remove map to Hold and keep their original label in notes.
+                </p>
+              )}
               {preview.sample.length > 0 && (
                 <ul className="divide-y divide-[var(--border)] text-sm">
                   {preview.sample.map((row) => (

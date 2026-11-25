@@ -20,7 +20,15 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import {
+  RequestContentFields,
+  requestFormBody,
+} from "@/components/requests/request-content-fields";
+import {
+  requestLabel,
+  requestTypes,
+  type RequestContent,
+} from "@/lib/request-content";
 import { EmptyState } from "@/components/app/empty-state";
 import {
   InlineStatus,
@@ -29,7 +37,7 @@ import {
 } from "@/components/requests/request-tools";
 import { cn } from "@/lib/utils";
 
-type Row = {
+type Row = RequestContent & {
   id: string;
   request_code: number;
   partnership_id: string;
@@ -37,11 +45,6 @@ type Row = {
   receiver_id: string;
   partner_id: string;
   direction: string;
-  placement_page_url: string;
-  anchor_text: string;
-  target_link: string;
-  request_type: string;
-  instructions: string | null;
   notes: string | null;
   status: string;
   canManage?: boolean;
@@ -93,7 +96,6 @@ type Preset = {
   status: string;
   filters: Filters;
 };
-const types = ["guest_post", "link_insertion", "other"];
 
 function isPreset(value: unknown): value is Preset {
   if (!value || typeof value !== "object") return false;
@@ -119,87 +121,20 @@ function EditRequestForm({
   disabled,
 }: {
   row: Row;
-  onSave: (value: Record<string, unknown>) => void;
+  onSave: (form: HTMLFormElement) => void;
   disabled: boolean;
 }) {
   return (
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        const data = new FormData(event.currentTarget);
-        onSave({
-          placementPageUrl: String(data.get("placementPageUrl")),
-          anchorText: String(data.get("anchorText")),
-          targetLink: String(data.get("targetLink")),
-          requestType: String(data.get("requestType")),
-          instructions: String(data.get("instructions") || ""),
-          notes: String(data.get("notes") || ""),
-        });
+        onSave(event.currentTarget);
       }}
       className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--canvas)] p-4 md:grid-cols-2"
     >
-      <h3 className="font-semibold md:col-span-2">Edit request details</h3>
-      <label className="text-xs">
-        Placement page
-        <Input
-          name="placementPageUrl"
-          defaultValue={row.placement_page_url}
-          className="mt-1"
-          type="url"
-          required
-        />
-      </label>
-      <label className="text-xs">
-        Anchor text
-        <Input
-          name="anchorText"
-          defaultValue={row.anchor_text}
-          className="mt-1"
-          required
-        />
-      </label>
-      <label className="text-xs">
-        Target link
-        <Input
-          name="targetLink"
-          defaultValue={row.target_link}
-          className="mt-1"
-          type="url"
-          required
-        />
-      </label>
-      <label className="text-xs">
-        Request type
-        <Select
-          name="requestType"
-          defaultValue={row.request_type}
-          className="mt-1"
-        >
-          <option value="guest_post">Guest post</option>
-          <option value="link_insertion">Link insertion</option>
-          <option value="other">Other</option>
-        </Select>
-      </label>
-      <label className="text-xs md:col-span-2">
-        Instructions
-        <Textarea
-          name="instructions"
-          defaultValue={row.instructions ?? ""}
-          className="mt-1"
-          rows={3}
-        />
-      </label>
-      <label className="text-xs md:col-span-2">
-        Notes
-        <Textarea
-          name="notes"
-          defaultValue={row.notes ?? ""}
-          className="mt-1"
-          rows={3}
-        />
-      </label>
+      <RequestContentFields row={row} />
       <Button type="submit" disabled={disabled} className="md:col-span-2">
-        Save request changes
+        Save request
       </Button>
     </form>
   );
@@ -434,15 +369,23 @@ export default function RequestListWorkspace({
     return () => controller.abort();
   }, [initialRequestId, markSeen, notify]);
 
-  async function update(row: Row, body: Record<string, unknown>) {
+  async function update(
+    row: Row,
+    body: Record<string, unknown>,
+    form?: HTMLFormElement,
+  ) {
     if (mutation.current) return false;
     mutation.current = true;
     setBusy(row.id);
     try {
       const response = await fetch("/api/requests", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: row.id, ...body }),
+        ...(form
+          ? requestFormBody(form, { id: row.id })
+          : {
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: row.id, ...body }),
+            }),
       });
       const data = await response.json();
       if (!response.ok)
@@ -709,7 +652,7 @@ export default function RequestListWorkspace({
                 }
               >
                 <option value="">All types</option>
-                {types.map((type) => (
+                {requestTypes.map((type) => (
                   <option value={type} key={type}>
                     {formatStatus(type)}
                   </option>
@@ -854,9 +797,9 @@ export default function RequestListWorkspace({
                         </div>
                         <div
                           className="max-w-60 truncate text-xs text-[var(--muted)]"
-                          title={row.anchor_text}
+                          title={requestLabel(row)}
                         >
-                          {row.anchor_text}
+                          {requestLabel(row)}
                         </div>
                         <div className="mt-3 space-y-2 md:hidden">
                           <p className="text-xs text-[var(--muted)]">
@@ -871,7 +814,9 @@ export default function RequestListWorkspace({
                           {counterpart}
                         </div>
                         <div className="whitespace-nowrap text-xs text-[var(--muted)]">
-                          {displayDate(row.created_at)}
+                          {row.import_date_unknown
+                            ? "Original date unavailable"
+                            : displayDate(row.created_at)}
                         </div>
                       </td>
                       <td className="hidden whitespace-nowrap px-4 py-3 capitalize md:table-cell">
@@ -952,7 +897,7 @@ export default function RequestListWorkspace({
         >
           <DialogContent
             title={`Request #${activeRow.request_code}`}
-            description={activeRow.anchor_text}
+            description={requestLabel(activeRow)}
             className="max-w-2xl"
             closeDisabled={busy === activeRow.id}
           >
@@ -966,15 +911,17 @@ export default function RequestListWorkspace({
               >
                 Placement page ↗
               </a>
-              <a
-                href={activeRow.target_link}
-                title={activeRow.target_link}
-                target="_blank"
-                rel="noreferrer"
-                className="break-all text-[var(--brand-dark)]"
-              >
-                Target link ↗
-              </a>
+              {activeRow.target_link && (
+                <a
+                  href={activeRow.target_link}
+                  title={activeRow.target_link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="break-all text-[var(--brand-dark)]"
+                >
+                  Target link ↗
+                </a>
+              )}
               <p className="text-[var(--muted)]">
                 {activeRow.import_key
                   ? "Historical request · No active review timer"
@@ -985,7 +932,11 @@ export default function RequestListWorkspace({
               key={activeRow.id}
               row={activeRow}
               disabled={busy !== null}
-              onSave={(changes) => void update(activeRow, changes)}
+              onSave={(form) => {
+                void update(activeRow, {}, form).then((ok) => {
+                  if (ok) setEditing(null);
+                });
+              }}
             />
           </DialogContent>
         </Dialog>

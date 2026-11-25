@@ -1,27 +1,9 @@
 "use client";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-
 import { useToast } from "@/components/app/toast";
-import { useState } from "react";
-type Item = {
-  placementPageUrl: string;
-  anchorText: string;
-  targetLink: string;
-  requestType: string;
-  instructions: string;
-  notes: string;
-};
-const blank = (): Item => ({
-  placementPageUrl: "",
-  anchorText: "",
-  targetLink: "",
-  requestType: "guest_post",
-  instructions: "",
-  notes: "",
-});
+import { useRef, useState } from "react";
+import { RequestContentFields } from "@/components/requests/request-content-fields";
+
 export default function BulkRequestForm({
   partnershipId,
   onComplete,
@@ -30,23 +12,28 @@ export default function BulkRequestForm({
   onComplete: (count: number) => void;
 }) {
   const notify = useToast();
-  const [items, setItems] = useState<Item[]>([blank(), blank()]);
+  const [items, setItems] = useState([0, 1]);
+  const nextId = useRef(2);
   const [busy, setBusy] = useState(false);
-  function change(index: number, key: keyof Item, value: string) {
-    setItems((current) =>
-      current.map((item, i) =>
-        i === index ? { ...item, [key]: value } : item,
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const requests = Array.from(
+      event.currentTarget.querySelectorAll("fieldset"),
+    ).map((group) =>
+      Object.fromEntries(
+        Array.from(
+          group.querySelectorAll<
+            HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+          >("[name]"),
+        ).map((field) => [field.name, field.value]),
       ),
     );
-  }
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
     setBusy(true);
     try {
       const response = await fetch("/api/requests/bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ partnershipId, requests: items }),
+        body: JSON.stringify({ partnershipId, requests }),
       });
       const data = await response.json();
       if (!response.ok)
@@ -73,7 +60,7 @@ export default function BulkRequestForm({
         <button
           type="button"
           disabled={items.length >= 50}
-          onClick={() => setItems((current) => [...current, blank()])}
+          onClick={() => setItems((current) => [...current, nextId.current++])}
           className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--text)] disabled:opacity-50"
         >
           + Add request
@@ -81,84 +68,13 @@ export default function BulkRequestForm({
       </div>
       {items.map((item, index) => (
         <fieldset
-          key={index}
+          key={item}
           className="grid gap-3 rounded-xl border border-[var(--border)] p-4 md:grid-cols-2"
         >
           <legend className="px-1 text-sm font-semibold">
             Request {index + 1}
           </legend>
-          <label className="text-sm">
-            Placement page URL *
-            <Input
-              required
-              type="url"
-              className="mt-1"
-              value={item.placementPageUrl}
-              onChange={(event) =>
-                change(index, "placementPageUrl", event.target.value)
-              }
-              placeholder="https://publisher.com/article"
-            />
-          </label>
-          <label className="text-sm">
-            Anchor text *
-            <Input
-              required
-              className="mt-1"
-              value={item.anchorText}
-              onChange={(event) =>
-                change(index, "anchorText", event.target.value)
-              }
-              placeholder="Exact anchor text"
-            />
-          </label>
-          <label className="text-sm">
-            Target link *
-            <Input
-              required
-              type="url"
-              className="mt-1"
-              value={item.targetLink}
-              onChange={(event) =>
-                change(index, "targetLink", event.target.value)
-              }
-              placeholder="https://yourwebsite.com/page"
-            />
-          </label>
-          <label className="text-sm">
-            Request type
-            <Select
-              className="mt-1"
-              value={item.requestType}
-              onChange={(event) =>
-                change(index, "requestType", event.target.value)
-              }
-            >
-              <option value="guest_post">Guest post</option>
-              <option value="link_insertion">Link insertion</option>
-              <option value="other">Other</option>
-            </Select>
-          </label>
-          <label className="text-sm md:col-span-2">
-            Instructions
-            <Textarea
-              rows={2}
-              className="mt-1"
-              value={item.instructions}
-              onChange={(event) =>
-                change(index, "instructions", event.target.value)
-              }
-            />
-          </label>
-          <label className="text-sm md:col-span-2">
-            Notes
-            <Textarea
-              rows={2}
-              className="mt-1"
-              value={item.notes}
-              onChange={(event) => change(index, "notes", event.target.value)}
-            />
-          </label>
+          <RequestContentFields allowUpload={false} />
           {items.length > 1 && (
             <button
               type="button"

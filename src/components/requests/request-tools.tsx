@@ -1,6 +1,13 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import {
+  copyRequest,
+  isDocumentRequest,
+  originalAndEdited,
+  requestLabel,
+  type RequestContent,
+} from "@/lib/request-content";
 import { Copy } from "lucide-react";
 import { useToast } from "@/components/app/toast";
 import { StatusBadge, formatStatus } from "@/components/status-badge";
@@ -32,16 +39,11 @@ export function placementDomain(url: string) {
   }
 }
 
-export type RequestSummary = {
+export type RequestSummary = RequestContent & {
   id: string;
   request_code: number;
-  placement_page_url: string;
-  anchor_text: string;
-  target_link: string;
-  request_type: string;
   status: string;
   rejection_reason?: string | null;
-  instructions: string | null;
   notes: string | null;
   deadline_at: string;
   import_key?: string | null;
@@ -268,38 +270,80 @@ export function RequestDetails({
     }
   }
 
-  const fields: { label: string; value: string; link?: boolean }[] = [
-    { label: "Placement page", value: row.placement_page_url, link: true },
-    { label: "Anchor text", value: row.anchor_text },
-    { label: "Target URL", value: row.target_link, link: true },
+  const documentRequest =
+    isDocumentRequest(row.request_type) && !row.anchor_text;
+  const legacyContent = originalAndEdited(row.instructions);
+  const fields: {
+    label: string;
+    value: string;
+    link?: boolean;
+    copy?: boolean;
+    href?: string;
+  }[] = [
+    {
+      label: documentRequest ? "Site" : "Placement page",
+      value: row.placement_page_url,
+      link: true,
+      copy: true,
+    },
+    ...(documentRequest
+      ? [
+          {
+            label: "Listicle position",
+            value: row.listicle_position ?? "",
+            copy: true,
+          },
+          {
+            label: "Document link",
+            value: row.document_url ?? "",
+            link: true,
+            copy: true,
+          },
+          {
+            label: "Attachment",
+            value: row.attachment_name ?? "",
+            link: true,
+            href: `/api/requests/attachment?requestId=${row.id}`,
+          },
+        ]
+      : [
+          { label: "Anchor text", value: requestLabel(row) ?? "", copy: true },
+          {
+            label: "Target URL",
+            value: row.target_link ?? "",
+            link: true,
+            copy: true,
+          },
+          {
+            label: "Original Content",
+            value: row.original_content ?? legacyContent.original,
+            copy: true,
+          },
+          {
+            label: "Edited Content",
+            value: row.edited_content ?? legacyContent.edited,
+            copy: true,
+          },
+        ]),
+    { label: "Instructions", value: row.instructions || "", copy: true },
+    { label: "Original notes", value: row.notes || "" },
     { label: "Type", value: formatStatus(row.request_type) },
     { label: "Status", value: formatStatus(row.status) },
-    { label: "Instructions", value: row.instructions || "" },
-    { label: "Original notes", value: row.notes || "" },
-    { label: "Created", value: date(row.created_at) },
+    {
+      label: "Created",
+      value: row.import_date_unknown
+        ? "Original date unavailable"
+        : date(row.created_at),
+    },
     {
       label: "Review deadline",
       value: row.import_key
         ? "Historical request · No active timer"
         : date(row.deadline_at),
     },
-    ...(row.rejection_reason
-      ? [{ label: "Rejection reason", value: row.rejection_reason }]
-      : []),
-  ];
-  const noteText = notes.map(
-    (note) => `${note.author} · ${date(note.created_at)}\n${note.body}`,
-  );
-  const historyText = history.map(
-    (change) =>
-      `${change.author} · ${date(change.created_at)}\n${formatStatus(change.from ?? "unknown")} → ${formatStatus(change.to ?? "unknown")}${change.reason ? `\nReason: ${change.reason}` : ""}`,
-  );
-  const all = [
-    `Request #${row.request_code}`,
-    ...fields.map((field) => `${field.label}: ${field.value || "—"}`),
-    ...(noteText.length ? ["", "Request notes", ...noteText] : []),
-    ...(historyText.length ? ["", "Status history", ...historyText] : []),
-  ].join("\n");
+    { label: "Rejection reason", value: row.rejection_reason || "" },
+  ].filter((field) => field.value);
+  const all = copyRequest(row);
 
   return (
     <Dialog
@@ -317,7 +361,7 @@ export function RequestDetails({
         description={
           mode === "note"
             ? "The note is visible to people who can view this request."
-            : row.anchor_text
+            : requestLabel(row)
         }
         className="max-w-2xl"
         closeDisabled={saving}
@@ -347,15 +391,10 @@ export function RequestDetails({
         ) : (
           <div className="space-y-5">
             <div className="flex justify-end">
-              <CopyButton
-                value={all}
-                label={
-                  loading || error ? "Copy request fields" : "Copy full request"
-                }
-              />
+              <CopyButton value={all} label="Copy full request" />
             </div>
             <dl className="divide-y divide-[var(--border)]">
-              {fields.map(({ label, value, link }) => (
+              {fields.map(({ label, value, link, copy, href }) => (
                 <div
                   key={label}
                   className="flex items-start justify-between gap-3 py-2"
@@ -368,7 +407,7 @@ export function RequestDetails({
                       {link ? (
                         <a
                           className="text-[var(--brand-dark)] underline"
-                          href={value}
+                          href={href ?? value}
                           target="_blank"
                           rel="noreferrer"
                         >
@@ -379,7 +418,7 @@ export function RequestDetails({
                       )}
                     </dd>
                   </div>
-                  {value && (
+                  {copy && value && (
                     <CopyButton
                       value={value}
                       label={`Copy ${label.toLowerCase()}`}
@@ -402,16 +441,15 @@ export function RequestDetails({
               <>
                 <DetailList
                   title="Request notes"
-                  items={notes.map((note, index) => ({
+                  items={notes.map((note) => ({
                     id: note.id,
                     label: `${note.author} · ${date(note.created_at)}`,
                     text: note.body,
-                    copy: noteText[index],
                   }))}
                 />
                 <DetailList
                   title="Status history"
-                  items={history.map((change, index) => ({
+                  items={history.map((change) => ({
                     id: change.id,
                     label: `${change.author} · ${date(change.created_at)}`,
                     text: (
@@ -423,7 +461,6 @@ export function RequestDetails({
                         )}
                       </>
                     ),
-                    copy: historyText[index],
                   }))}
                 />
               </>
@@ -440,7 +477,7 @@ function DetailList({
   items,
 }: {
   title: string;
-  items: { id: string; label: string; text: ReactNode; copy: string }[];
+  items: { id: string; label: string; text: ReactNode }[];
 }) {
   return (
     <section>
@@ -460,7 +497,6 @@ function DetailList({
                 {item.text}
               </div>
             </div>
-            <CopyButton value={item.copy} label="Copy entry" />
           </li>
         ))}
       </ul>

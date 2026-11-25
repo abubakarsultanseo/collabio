@@ -86,3 +86,15 @@ The official Google button sends a nonce-bound Google credential to Collabio, wh
 ### Check a dashboard server error
 
 Confirm migration `0008_partner_onboarding.sql` has already run once in the production Supabase project. The dashboard can render if the optional avatar or historical request column is absent. Imported requests, invitation activation and other features from migration 0008 still depend on that migration. If the dashboard error recurs, use the reference on the error screen to find the server exception in Vercel's runtime logs. Verify that the URL, anon key and service-role key in Vercel belong to the same Supabase project.
+
+## Request formats and sheet import
+
+1. Apply `supabase/migrations/0009_request_content_formats.sql` once after 0008, before deploying. It adds the Listicle type, structured request content and the private request documents bucket.
+2. Link insertion is the default. Use Placement page URL, Anchor text, Target link, Original Content, and Edited Content. Paste general editing directions into Instructions if needed. **Copy full request** copies the placement URL, anchor, target, and two content sections in plain text.
+3. Guest post needs a Site URL and a document link or a PDF, DOC, or DOCX upload (up to 3 MB). For bulk entry, use document URLs. Listicle needs a Site URL, the requested position and a document link. Attachments are available to signed-in users who can view the request.
+4. From Google Sheets, use **File → Download → Comma-separated values (.csv, current sheet)**. In Collabio, open **Import requests**, choose the partner and their exact Google email, and select the source layout. The templates are also in [docs/import-templates](docs/import-templates/).
+   - For the side-by-side **Collab** layout, upload the whole tab and choose the exact heading of the partner block you want. Select the direction for that block and repeat for each partner.
+   - For the **Tabbed** layout, export Abubakar and Andy separately. If the tab titles identify the original sender, choose **Sent by me** for Abubakar and **Received from partner** for Andy. Do not import the **Our website** reference tab as requests.
+5. Use the original URLs and verify document links. If a Google Sheets chip exports only its title, add the actual link in a **Document URL** column. Set **Request Type** to **Guest post** or **Listicle** for document rows, and add **Listicle Position** where applicable. Leave unavailable historical dates empty. Check the preview before confirming. Existing imported rows are deduplicated, and confirming a historical import starts no new notification or review timer.
+
+Sheet status translations used by the two native layouts include Requested and New Req → New Request, In Process → In Progress, and Not Live and Want to remove → Hold. The last two labels stay in the request notes. Rejected rows require their source reason. The importer does not change Google Docs sharing permissions.

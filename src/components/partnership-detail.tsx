@@ -6,9 +6,11 @@ import {
   placementDomain,
 } from "@/components/requests/request-tools";
 import { EmptyState } from "@/components/app/empty-state";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import {
+  RequestContentFields,
+  requestFormBody,
+} from "@/components/requests/request-content-fields";
+import { requestLabel, type RequestContent } from "@/lib/request-content";
 import { Button } from "@/components/ui/button";
 
 import { useToast } from "@/components/app/toast";
@@ -25,7 +27,7 @@ import {
 } from "lucide-react";
 import BulkRequestForm from "@/components/bulk-request-form";
 
-type RequestRow = {
+type RequestRow = RequestContent & {
   id: string;
   request_code: number;
   deal_id: string | null;
@@ -33,11 +35,6 @@ type RequestRow = {
   sender_id: string;
   receiver_id: string;
   direction: string;
-  placement_page_url: string;
-  anchor_text: string;
-  target_link: string;
-  request_type: string;
-  instructions: string | null;
   notes: string | null;
   status: string;
   canChangeStatus?: boolean;
@@ -51,14 +48,6 @@ type RequestRow = {
   shared_at: string | null;
   sender: { full_name: string } | null;
   receiver: { full_name: string } | null;
-};
-const emptyForm = {
-  placementPageUrl: "",
-  anchorText: "",
-  targetLink: "",
-  requestType: "guest_post",
-  instructions: "",
-  notes: "",
 };
 export default function PartnershipDetail({
   id,
@@ -80,7 +69,7 @@ export default function PartnershipDetail({
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState("all");
   const [bulkMode, setBulkMode] = useState(false);
-  const [form, setForm] = useState(emptyForm);
+  const [formVersion, setFormVersion] = useState(0);
   const incoming = requests.filter((row) => row.receiver_id === currentUserId);
   const outgoing = requests.filter((row) => row.sender_id === currentUserId);
   const live = requests.filter((row) => row.status === "live");
@@ -142,17 +131,19 @@ export default function PartnershipDetail({
   }, [load, notify]);
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    const payload = requestFormBody(event.currentTarget as HTMLFormElement, {
+      partnershipId: id,
+    });
     setBusy(true);
     try {
       const response = await fetch("/api/requests", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ partnershipId: id, ...form }),
+        ...payload,
       });
       const data = await response.json();
       if (!response.ok)
         throw new Error(data.error ?? "Could not send request.");
-      setForm(emptyForm);
+      setFormVersion((version) => version + 1);
       notify(
         `Request #${data.request_code} sent. The receiver has 24 hours to review it.`,
         "success",
@@ -291,83 +282,12 @@ export default function PartnershipDetail({
             />
           </div>
         ) : (
-          <form onSubmit={submit} className="mt-4 grid gap-3 md:grid-cols-2">
-            <label className="text-sm font-medium md:col-span-2">
-              Placement page URL *
-              <Input
-                type="url"
-                required
-                className="mt-1"
-                placeholder="https://publisher.com/article"
-                value={form.placementPageUrl}
-                onChange={(event) =>
-                  setForm({ ...form, placementPageUrl: event.target.value })
-                }
-              />
-            </label>
-            <label className="text-sm font-medium">
-              Anchor text *
-              <Input
-                required
-                className="mt-1"
-                placeholder="Exact anchor text"
-                value={form.anchorText}
-                onChange={(event) =>
-                  setForm({ ...form, anchorText: event.target.value })
-                }
-              />
-            </label>
-            <label className="text-sm font-medium">
-              Target link *
-              <Input
-                required
-                type="url"
-                className="mt-1"
-                placeholder="https://client.com/page"
-                value={form.targetLink}
-                onChange={(event) =>
-                  setForm({ ...form, targetLink: event.target.value })
-                }
-              />
-            </label>
-            <label className="text-sm font-medium">
-              Request type
-              <Select
-                className="mt-1"
-                value={form.requestType}
-                onChange={(event) =>
-                  setForm({ ...form, requestType: event.target.value })
-                }
-              >
-                <option value="guest_post">Guest post</option>
-                <option value="link_insertion">Link insertion</option>
-                <option value="other">Other</option>
-              </Select>
-            </label>
-            <label className="text-sm font-medium">
-              Edit / Guest Post Instructions
-              <Textarea
-                className="mt-1"
-                rows={3}
-                maxLength={5000}
-                value={form.instructions}
-                onChange={(event) =>
-                  setForm({ ...form, instructions: event.target.value })
-                }
-              />
-            </label>
-            <label className="text-sm font-medium md:col-span-2">
-              Notes / reason
-              <Textarea
-                className="mt-1"
-                rows={3}
-                maxLength={5000}
-                value={form.notes}
-                onChange={(event) =>
-                  setForm({ ...form, notes: event.target.value })
-                }
-              />
-            </label>
+          <form
+            key={formVersion}
+            onSubmit={submit}
+            className="mt-4 grid gap-3 md:grid-cols-2"
+          >
+            <RequestContentFields />
             <Button disabled={busy} className="md:col-span-2">
               {busy ? "Sending…" : "Send request"}
             </Button>
@@ -417,16 +337,18 @@ export default function PartnershipDetail({
                       {placementDomain(row.placement_page_url)}
                     </h3>
                     <p className="text-sm text-[var(--muted)]">
-                      {row.anchor_text}
+                      {requestLabel(row)}
                     </p>
                     <p className="text-[var(--muted)] mt-1 text-xs">
                       {row.sender_id === currentUserId
                         ? "Sent by you"
                         : "Received from workspace member"}{" "}
                       ·{" "}
-                      {new Date(row.created_at).toLocaleString("en-PK", {
-                        timeZone: "Asia/Karachi",
-                      })}
+                      {row.import_date_unknown
+                        ? "Original date unavailable"
+                        : new Date(row.created_at).toLocaleString("en-PK", {
+                            timeZone: "Asia/Karachi",
+                          })}
                     </p>
                   </div>
                   <StatusBadge

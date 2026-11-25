@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { requireUser } from "@/server/auth";
 import { getProfile } from "@/server/profile";
+import { requestLabel } from "@/lib/request-content";
 import { missingColumn } from "@/lib/supabase/schema-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -47,19 +48,31 @@ export default async function Dashboard() {
     if (!ids.length) return { data: [], error: null };
     const result = await db
       .from("requests")
-      .select(`${requestFields},import_key`)
+      .select(`${requestFields},import_key,import_date_unknown`)
       .in("partnership_id", ids)
       .order("created_at", { ascending: false })
       .limit(200);
-    if (!missingColumn(result.error, "import_key")) return result;
-    const legacy = await db
-      .from("requests")
-      .select(requestFields)
+    if (
+      !missingColumn(result.error, "import_key") &&
+      !missingColumn(result.error, "import_date_unknown")
+    )
+      return result;
+    const legacyQuery = db.from("requests");
+    const legacy = await (
+      missingColumn(result.error, "import_key")
+        ? legacyQuery.select(requestFields)
+        : legacyQuery.select(`${requestFields},import_key`)
+    )
       .in("partnership_id", ids)
       .order("created_at", { ascending: false })
       .limit(200);
     return {
-      data: legacy.data?.map((row) => ({ ...row, import_key: null })) ?? [],
+      data:
+        legacy.data?.map((row) => ({
+          ...row,
+          import_key: "import_key" in row ? row.import_key : null,
+          import_date_unknown: false,
+        })) ?? [],
       error: legacy.error,
     };
   }
@@ -83,10 +96,16 @@ export default async function Dashboard() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const receivedToday = all.filter(
-    (row) => row.receiver_id === user.id && new Date(row.created_at) >= today,
+    (row) =>
+      !row.import_date_unknown &&
+      row.receiver_id === user.id &&
+      new Date(row.created_at) >= today,
   ).length;
   const sentToday = all.filter(
-    (row) => row.sender_id === user.id && new Date(row.created_at) >= today,
+    (row) =>
+      !row.import_date_unknown &&
+      row.sender_id === user.id &&
+      new Date(row.created_at) >= today,
   ).length;
   const awaitingReview = all.filter(
     (row) =>
@@ -318,7 +337,7 @@ export default async function Dashboard() {
                     const sent = row.sender_id === user.id;
                     const peer =
                       personMap[sent ? row.receiver_id : row.sender_id];
-                    const anchor = row.anchor_text || "Collaboration request";
+                    const anchor = requestLabel(row);
                     return (
                       <tr key={row.id}>
                         <td className="px-4 py-3">
@@ -333,7 +352,9 @@ export default async function Dashboard() {
                             dateTime={row.created_at}
                             className="whitespace-nowrap text-xs text-[var(--muted)]"
                           >
-                            {formatDate(row.created_at)}
+                            {row.import_date_unknown
+                              ? "Original date unavailable"
+                              : formatDate(row.created_at)}
                           </time>
                         </td>
                         <td className="px-4 py-3">

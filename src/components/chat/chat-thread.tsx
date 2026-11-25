@@ -10,6 +10,7 @@ import {
 } from "react";
 import { Copy, ExternalLink, Send } from "lucide-react";
 import type { ChatTarget } from "@/components/chat/chat-context";
+import { requestLabel } from "@/lib/request-content";
 import { Avatar } from "@/components/app/avatar";
 import { useToast } from "@/components/app/toast";
 import { StatusBadge, formatStatus } from "@/components/status-badge";
@@ -28,8 +29,10 @@ type RequestDetails = {
   id: string;
   request_code: number;
   placement_page_url: string;
-  anchor_text: string;
-  target_link: string;
+  anchor_text: string | null;
+  target_link: string | null;
+  document_url?: string | null;
+  attachment_name?: string | null;
   request_type: string;
   status: string;
 };
@@ -369,7 +372,7 @@ export function ChatThread({
 
   const request = info?.request;
   const title = request
-    ? requestChatTitle(request.placement_page_url, request.anchor_text)
+    ? requestChatTitle(request.placement_page_url, requestLabel(request))
     : (info?.title ?? target.title ?? "Conversation");
   return (
     <>
@@ -412,28 +415,53 @@ export function ChatThread({
                 rel="noreferrer"
                 className="inline-flex items-center gap-1"
               >
-                Placement page <ExternalLink size={12} aria-hidden />
+                {request.anchor_text ? "Placement page" : "Site"}{" "}
+                <ExternalLink size={12} aria-hidden />
               </a>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1"
-                onClick={() => {
-                  void navigator.clipboard
-                    .writeText(request.anchor_text)
-                    .then(() => notify("Anchor copied."))
-                    .catch(() => notify("Could not copy the anchor.", "error"));
-                }}
-              >
-                <Copy size={12} aria-hidden /> Copy anchor
-              </button>
-              <a
-                href={request.target_link}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1"
-              >
-                Target URL <ExternalLink size={12} aria-hidden />
-              </a>
+              {request.anchor_text && (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1"
+                  onClick={() => {
+                    void navigator.clipboard
+                      .writeText(request.anchor_text ?? "")
+                      .then(() => notify("Anchor copied."))
+                      .catch(() =>
+                        notify("Could not copy the anchor.", "error"),
+                      );
+                  }}
+                >
+                  <Copy size={12} aria-hidden /> Copy anchor
+                </button>
+              )}
+              {request.target_link && (
+                <a
+                  href={request.target_link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1"
+                >
+                  Target URL <ExternalLink size={12} aria-hidden />
+                </a>
+              )}
+              {request.document_url && (
+                <a
+                  href={request.document_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1"
+                >
+                  Document <ExternalLink size={12} aria-hidden />
+                </a>
+              )}
+              {request.attachment_name && (
+                <a
+                  href={`/api/requests/attachment?requestId=${request.id}`}
+                  className="inline-flex items-center gap-1"
+                >
+                  Download document
+                </a>
+              )}
             </div>
           </>
         )}

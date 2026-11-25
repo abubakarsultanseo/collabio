@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { importFormats } from "@/lib/request-import-templates";
 import { parseImport } from "@/lib/import-requests";
 
 const input = z.object({
@@ -14,6 +15,9 @@ const input = z.object({
   name: z.string().trim().min(1).max(100),
   csv: z.string().min(1).max(2_000_000),
   action: z.enum(["preview", "import"]),
+  format: z.enum(importFormats).default("standard"),
+  direction: z.enum(["sent", "received"]).optional(),
+  blockName: z.string().trim().max(100).optional(),
 });
 
 export async function POST(request: Request) {
@@ -50,7 +54,7 @@ export async function POST(request: Request) {
     const { email, name, csv, action } = parsed.data;
     let source;
     try {
-      source = parseImport(csv);
+      source = parseImport(csv, parsed.data);
     } catch (error) {
       return NextResponse.json(
         { error: error instanceof Error ? error.message : "Invalid CSV." },
@@ -82,8 +86,8 @@ export async function POST(request: Request) {
     function signature(
       sender: string,
       placement: string,
-      target: string,
-      anchor: string,
+      target: string | null,
+      anchor: string | null,
       created: string,
     ) {
       return JSON.stringify([
@@ -136,15 +140,16 @@ export async function POST(request: Request) {
     const ready = source.rows.filter(
       (row) =>
         !imported.has(row.key) &&
-        !native.has(
-          signature(
-            row.direction === "sent" ? user.id : (partner?.id ?? ""),
-            row.placement,
-            row.target,
-            row.anchor,
-            row.created,
-          ),
-        ),
+        (!row.created ||
+          !native.has(
+            signature(
+              row.direction === "sent" ? user.id : (partner?.id ?? ""),
+              row.placement,
+              row.target,
+              row.anchor,
+              row.created,
+            ),
+          )),
     );
     const summary = {
       email,
@@ -154,13 +159,14 @@ export async function POST(request: Request) {
       duplicates: source.rows.length - ready.length,
       accountStatus: partner?.account_status ?? "pending",
       issues: source.issues,
+      unknownDates: ready.filter((row) => !row.created).length,
       sample: ready
         .slice(0, 10)
-        .map(({ line, direction, placement, anchor, status }) => ({
+        .map(({ line, direction, placement, anchor, status, type }) => ({
           line,
           direction,
           placement,
-          anchor,
+          anchor: anchor || type.replaceAll("_", " "),
           status,
         })),
     };

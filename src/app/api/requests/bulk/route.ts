@@ -3,17 +3,16 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  contentColumns,
+  contentInput,
+  validateContent,
+} from "@/lib/request-input";
 import { sendCollabEmail } from "@/lib/email-notifications";
 
-const itemSchema = z.object({
-  placementPageUrl: z.string().url().max(2048),
-  anchorText: z.string().trim().min(1).max(500),
-  targetLink: z.string().url().max(2048),
-  requestType: z
-    .enum(["guest_post", "link_insertion", "other"])
-    .default("other"),
-  instructions: z.string().max(5000).optional(),
-  notes: z.string().max(5000).optional(),
+const itemSchema = contentInput.superRefine((item, context) => {
+  const issue = validateContent(item, false);
+  if (issue) context.addIssue({ code: "custom", message: issue });
 });
 const schema = z.object({
   partnershipId: z.string().uuid(),
@@ -107,12 +106,7 @@ export async function POST(request: Request) {
       sender_id: user.id,
       receiver_id: receiverId,
       direction,
-      placement_page_url: item.placementPageUrl,
-      anchor_text: item.anchorText,
-      target_link: item.targetLink,
-      request_type: item.requestType,
-      instructions: item.instructions || null,
-      notes: item.notes || null,
+      ...contentColumns(item),
       status: "new_request",
     }));
     const { data: created, error: createError } = await db

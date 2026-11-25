@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useChat, type ChatTarget } from "@/components/chat/chat-drawer";
+import { requestLabel } from "@/lib/request-content";
 import { requestChatTitle } from "@/components/chat/chat-thread";
 
 type SourceRow = {
   id: string;
   placement_page_url: string;
-  anchor_text: string;
+  anchor_text: string | null;
+  request_type?: string;
 };
 
 export function useRequestChat(rows: SourceRow[]) {
@@ -86,7 +88,7 @@ export function useRequestChat(rows: SourceRow[]) {
     return {
       kind: "request",
       threadId: row.id,
-      title: requestChatTitle(row.placement_page_url, row.anchor_text),
+      title: requestChatTitle(row.placement_page_url, requestLabel(row)),
       onRead: (id) => {
         readVersion.current.set(id, Date.now());
         currentCounts.current = { ...currentCounts.current, [id]: 0 };

@@ -161,13 +161,11 @@ export async function POST(request: Request) {
           { status: 403 },
         );
     }
-    const { error } = await db
-      .from("request_comments")
-      .insert({
-        request_id: row.id,
-        author_id: state.user.id,
-        body: parsed.data.body,
-      });
+    const { error } = await db.from("request_comments").insert({
+      request_id: row.id,
+      author_id: state.user.id,
+      body: parsed.data.body,
+    });
     if (error) throw error;
     const recipient =
       state.user.id === row.sender_id
@@ -175,25 +173,21 @@ export async function POST(request: Request) {
         : state.user.id === row.receiver_id
           ? row.sender_id
           : row.partner_id;
-    await db
-      .from("notifications")
-      .insert({
-        recipient_id: recipient,
-        actor_id: state.user.id,
-        request_id: row.id,
-        type: "comment_received",
-        title: "New request message",
-        description: `A message was added to request: ${row.anchor_text}`,
-      });
-    await db
-      .from("request_activity")
-      .insert({
-        request_id: row.id,
-        partner_id: row.partner_id,
-        actor_id: state.user.id,
-        action_type: "comment_added",
-        new_value: { body: parsed.data.body },
-      });
+    await db.from("notifications").insert({
+      recipient_id: recipient,
+      actor_id: state.user.id,
+      request_id: row.id,
+      type: "comment_received",
+      title: "New request message",
+      description: `A message was added to request: ${row.anchor_text ?? "document request"}`,
+    });
+    await db.from("request_activity").insert({
+      request_id: row.id,
+      partner_id: row.partner_id,
+      actor_id: state.user.id,
+      action_type: "comment_added",
+      new_value: { body: parsed.data.body },
+    });
     const { data: recipientProfile } = await db
       .from("profiles")
       .select("email")

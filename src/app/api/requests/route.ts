@@ -2,22 +2,27 @@ import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requestTypes, isDocumentRequest } from "@/lib/request-content";
+import {
+  contentColumns,
+  contentInput,
+  validateContent,
+} from "@/lib/request-input";
+import {
+  attachmentError,
+  readRequestForm,
+  requestAttachmentBucket,
+  uploadRequestAttachment,
+} from "@/lib/request-attachment";
 import { sendCollabEmail } from "@/lib/email-notifications";
 
-const requestSchema = z.object({
+const requestSchema = contentInput.extend({
   partnershipId: z.string().uuid(),
   dealId: z.string().uuid().optional(),
-  placementPageUrl: z.string().url().max(2048),
-  anchorText: z.string().trim().min(1).max(500),
-  targetLink: z.string().url().max(2048),
-  requestType: z
-    .enum(["guest_post", "link_insertion", "other"])
-    .default("other"),
-  instructions: z.string().max(5000).optional(),
-  notes: z.string().max(5000).optional(),
 });
 const patchSchema = z
   .object({
+    ...contentInput.partial().shape,
     id: z.string().uuid(),
     status: z
       .enum([
@@ -35,12 +40,6 @@ const patchSchema = z
         "overdue",
       ])
       .optional(),
-    placementPageUrl: z.string().url().max(2048).optional(),
-    anchorText: z.string().trim().min(1).max(500).optional(),
-    targetLink: z.string().url().max(2048).optional(),
-    requestType: z.enum(["guest_post", "link_insertion", "other"]).optional(),
-    instructions: z.string().max(5000).nullable().optional(),
-    notes: z.string().max(5000).nullable().optional(),
     markSeen: z.boolean().optional(),
     reason: z.string().trim().min(1).max(2000).optional(),
   })
@@ -166,7 +165,7 @@ export async function GET(request: Request) {
     let query = db
       .from("requests")
       .select(
-        "id,request_code,partnership_id,deal_id,link_side,partner_id,sender_id,receiver_id,direction,placement_page_url,anchor_text,target_link,request_type,instructions,notes,status,first_viewed_at,deadline_at,was_overdue,overdue_at,completed_at,created_at,updated_at,shared_at,live_at,rejection_reason,import_key",
+        "id,request_code,partnership_id,deal_id,link_side,partner_id,sender_id,receiver_id,direction,placement_page_url,anchor_text,target_link,request_type,instructions,notes,status,first_viewed_at,deadline_at,was_overdue,overdue_at,completed_at,created_at,updated_at,shared_at,live_at,rejection_reason,import_key,original_content,edited_content,document_url,listicle_position,attachment_name,import_date_unknown",
       )
       .in("partnership_id", ids)
       .order("created_at", { ascending: false })
@@ -183,20 +182,21 @@ export async function GET(request: Request) {
     if (scope === "overdue") query = query.eq("was_overdue", true);
     if (status) query = query.eq("status", status);
     if (partnershipId) query = query.eq("partnership_id", partnershipId);
-    if (
-      requestType &&
-      ["guest_post", "link_insertion", "other"].includes(requestType)
-    )
+    if (requestType && requestTypes.some((type) => type === requestType))
       query = query.eq("request_type", requestType);
     if (direction === "sent") query = query.eq("sender_id", current.user.id);
     if (direction === "received")
       query = query.eq("receiver_id", current.user.id);
     if (createdFrom && /^\d{4}-\d{2}-\d{2}$/.test(createdFrom))
-      query = query.gte("created_at", `${createdFrom}T00:00:00.000Z`);
+      query = query
+        .eq("import_date_unknown", false)
+        .gte("created_at", `${createdFrom}T00:00:00.000Z`);
     if (createdTo && /^\d{4}-\d{2}-\d{2}$/.test(createdTo)) {
       const end = new Date(`${createdTo}T00:00:00.000Z`);
       end.setUTCDate(end.getUTCDate() + 1);
-      query = query.lt("created_at", end.toISOString());
+      query = query
+        .eq("import_date_unknown", false)
+        .lt("created_at", end.toISOString());
     }
     if (search) {
       const terms = [
@@ -205,6 +205,8 @@ export async function GET(request: Request) {
         `target_link.ilike.%${search}%`,
         `instructions.ilike.%${search}%`,
         `notes.ilike.%${search}%`,
+        `original_content.ilike.%${search}%`,
+        `edited_content.ilike.%${search}%`,
       ];
       if (/^\d+$/.test(search)) terms.push(`request_code.eq.${Number(search)}`);
       query = query.or(terms.join(","));
@@ -277,7 +279,8 @@ export async function POST(request: Request) {
   try {
     const current = await session();
     if ("error" in current) return current.error;
-    const parsed = requestSchema.safeParse(await request.json());
+    const { body, file } = await readRequestForm(request);
+    const parsed = requestSchema.safeParse(body);
     if (!parsed.success)
       return NextResponse.json(
         {
@@ -286,6 +289,8 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     const input = parsed.data;
+    const issue = attachmentError(file) ?? validateContent(input, !!file);
+    if (issue) return NextResponse.json({ error: issue }, { status: 400 });
     const db = createAdminClient();
     const ids = await accessiblePartnershipIds(
       current.user.id,
@@ -358,6 +363,9 @@ export async function POST(request: Request) {
     const senderSide = pair.user_a_id === current.user.id ? "a" : "b";
     const direction =
       current.role === "admin" ? "admin_to_partner" : "partner_to_admin";
+    const attachment = file
+      ? await uploadRequestAttachment(db, input.partnershipId, file)
+      : null;
     const { data: created, error } = await db
       .from("requests")
       .insert({
@@ -368,17 +376,19 @@ export async function POST(request: Request) {
         sender_id: current.user.id,
         receiver_id: receiverId,
         direction,
-        placement_page_url: input.placementPageUrl,
-        anchor_text: input.anchorText,
-        target_link: input.targetLink,
-        request_type: input.requestType,
-        instructions: input.instructions || null,
-        notes: input.notes || null,
+        ...contentColumns(input),
+        ...attachment,
         status: "new_request",
       })
       .select("id,request_code,deadline_at")
       .single();
-    if (error) throw error;
+    if (error) {
+      if (attachment)
+        await db.storage
+          .from(requestAttachmentBucket)
+          .remove([attachment.attachment_path]);
+      throw error;
+    }
     after(async () => {
       await sendCollabEmail(db, {
         to: receiver.email,
@@ -386,7 +396,9 @@ export async function POST(request: Request) {
         template: "new_request",
         subject: "New Collabio request",
         message: `${sender.full_name} sent you a collaboration request.`,
-        anchor: input.anchorText,
+        anchor: isDocumentRequest(input.requestType)
+          ? undefined
+          : (input.anchorText ?? undefined),
         actor: sender.full_name,
         recipient: receiver.full_name,
       });
@@ -410,7 +422,8 @@ export async function PATCH(request: Request) {
   try {
     const current = await session();
     if ("error" in current) return current.error;
-    const parsed = patchSchema.safeParse(await request.json());
+    const { body, file } = await readRequestForm(request);
+    const parsed = patchSchema.safeParse(body);
     if (!parsed.success)
       return NextResponse.json(
         { error: parsed.error.issues[0]?.message ?? "Invalid request update." },
@@ -487,7 +500,8 @@ export async function PATCH(request: Request) {
     }
 
     const isStatus = changes.status !== undefined;
-    const edits = Object.keys(changes).some((key) => key !== "status");
+    const edits =
+      !!file || Object.keys(changes).some((key) => key !== "status");
     if (current.role !== "admin") {
       if (edits)
         return NextResponse.json(
@@ -523,26 +537,77 @@ export async function PATCH(request: Request) {
       update.status = changes.status;
       update.rejection_reason = changes.status === "rejected" ? reason : null;
     }
-    if (changes.placementPageUrl !== undefined)
-      update.placement_page_url = changes.placementPageUrl;
-    if (changes.anchorText !== undefined)
-      update.anchor_text = changes.anchorText;
-    if (changes.targetLink !== undefined)
-      update.target_link = changes.targetLink;
-    if (changes.requestType !== undefined)
-      update.request_type = changes.requestType;
-    if (changes.instructions !== undefined)
-      update.instructions = changes.instructions;
-    if (changes.notes !== undefined) update.notes = changes.notes;
-    const { data: updated, error: updateError } = await db
-      .from("requests")
-      .update(update)
-      .eq("id", id)
+    let attachment: Awaited<ReturnType<typeof uploadRequestAttachment>> | null =
+      null;
+    if (edits) {
+      const saved = contentInput.safeParse({
+        placementPageUrl: row.placement_page_url,
+        anchorText: row.anchor_text,
+        targetLink: row.target_link,
+        requestType: row.request_type,
+        originalContent: row.original_content,
+        editedContent: row.edited_content,
+        documentUrl: row.document_url,
+        listiclePosition: row.listicle_position,
+        instructions: row.instructions,
+        notes: row.notes,
+        ...changes,
+      });
+      if (!saved.success)
+        return NextResponse.json(
+          { error: saved.error.issues[0]?.message },
+          { status: 400 },
+        );
+      const keepFile =
+        saved.data.requestType === "guest_post" &&
+        !saved.data.documentUrl &&
+        !!row.attachment_path;
+      const issue =
+        attachmentError(file) ??
+        validateContent(saved.data, !!file || keepFile);
+      if (issue) return NextResponse.json({ error: issue }, { status: 400 });
+      attachment = file
+        ? await uploadRequestAttachment(db, row.partnership_id, file)
+        : null;
+      Object.assign(
+        update,
+        contentColumns(saved.data),
+        attachment ?? {
+          attachment_path: keepFile ? row.attachment_path : null,
+          attachment_name: keepFile ? row.attachment_name : null,
+        },
+      );
+    }
+    const write = db.from("requests").update(update).eq("id", id);
+    const { data: updated, error: updateError } = await (
+      edits ? write.eq("updated_at", row.updated_at) : write
+    )
       .select(
-        "id,status,first_viewed_at,updated_at,placement_page_url,anchor_text,target_link,request_type,instructions,notes,live_at,shared_at,was_overdue,rejection_reason",
+        "id,status,first_viewed_at,updated_at,placement_page_url,anchor_text,target_link,request_type,instructions,notes,live_at,shared_at,was_overdue,rejection_reason,original_content,edited_content,document_url,listicle_position,attachment_name",
       )
-      .single();
-    if (updateError) throw updateError;
+      .maybeSingle();
+    if (updateError || !updated) {
+      if (attachment)
+        await db.storage
+          .from(requestAttachmentBucket)
+          .remove([attachment.attachment_path]);
+      if (updateError) throw updateError;
+      return NextResponse.json(
+        {
+          error:
+            "This request changed while you were editing it. Refresh and try again.",
+        },
+        { status: 409 },
+      );
+    }
+    if (
+      edits &&
+      row.attachment_path &&
+      update.attachment_path !== row.attachment_path
+    )
+      await db.storage
+        .from(requestAttachmentBucket)
+        .remove([row.attachment_path]);
     const status = changes.status;
     if (status !== undefined && status !== row.status) {
       const recipientId =
@@ -584,7 +649,9 @@ export async function PATCH(request: Request) {
             instructions: row.instructions,
             notes: row.notes,
           },
-          new_value: update,
+          new_value: Object.fromEntries(
+            Object.entries(update).filter(([key]) => key !== "attachment_path"),
+          ),
         });
       if (activityError) throw activityError;
     }
@@ -617,7 +684,7 @@ export async function DELETE(request: Request) {
     const db = createAdminClient();
     const { data: row, error: findError } = await db
       .from("requests")
-      .select("id,partnership_id,partner_id")
+      .select("id,partnership_id,partner_id,attachment_path")
       .eq("id", parsed.data.id)
       .maybeSingle();
     if (findError) throw findError;
@@ -638,6 +705,10 @@ export async function DELETE(request: Request) {
       );
     const { error } = await db.from("requests").delete().eq("id", row.id);
     if (error) throw error;
+    if (row.attachment_path)
+      await db.storage
+        .from(requestAttachmentBucket)
+        .remove([row.attachment_path]);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json(

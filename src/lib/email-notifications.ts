@@ -9,7 +9,7 @@ type RequestEmail = {
   template: string;
   subject: string;
   message: string;
-  anchor?: string;
+  anchor?: string | null;
   actorId?: string;
   actor?: string;
   recipient?: string;
@@ -32,7 +32,9 @@ export async function requestEmail(db: AdminDb, input: RequestEmail) {
   const [requestResult, actorResult] = await Promise.all([
     db
       .from("requests")
-      .select("request_code,placement_page_url,anchor_text")
+      .select(
+        "request_code,placement_page_url,anchor_text,request_type,listicle_position",
+      )
       .eq("id", input.requestId)
       .maybeSingle(),
     input.actorId && !input.actor
@@ -63,6 +65,10 @@ export async function requestEmail(db: AdminDb, input: RequestEmail) {
   if (domain) fields.push(["Placement site", domain]);
   const anchor = request?.anchor_text ?? input.anchor;
   if (anchor) fields.push(["Anchor text", anchor]);
+  else if (request?.request_type)
+    fields.push(["Request type", formatStatus(request.request_type)]);
+  if (request?.listicle_position)
+    fields.push(["Listicle position", request.listicle_position]);
   if (actor) fields.push(["Updated by", actor]);
   if (input.fromStatus)
     fields.push(["Previous status", formatStatus(input.fromStatus)]);
