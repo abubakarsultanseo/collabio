@@ -11,6 +11,7 @@ import {
   Settings,
   ShieldCheck,
   Users,
+  WandSparkles,
   type LucideIcon,
 } from "lucide-react";
 
@@ -42,6 +43,7 @@ export const workspaceItems: NavItem[] = [
     icon: Send,
     mobileLabel: "Sent",
   },
+  { label: "Format Request", href: "/requests/format", icon: WandSparkles },
   { label: "Notifications", href: "/notifications", icon: Bell },
   { label: "Pending & Overdue", href: "/pending-overdue", icon: Clock3 },
   {

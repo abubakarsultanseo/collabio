@@ -17,6 +17,7 @@ import {
   Pencil,
   Search,
   SlidersHorizontal,
+  WandSparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -704,6 +705,15 @@ export default function RequestListWorkspace({
             Search, review, and update requests shared with your partners.
           </p>
         </div>
+        {directionList && (
+          <Link
+            href="/requests/format"
+            className={buttonVariants({ variant: "outline" })}
+          >
+            <WandSparkles size={16} aria-hidden />
+            Format Request
+          </Link>
+        )}
       </header>
 
       {directionList && (
