@@ -258,8 +258,9 @@ export function RequestFormatter() {
           </Button>
         </div>
         <p id="request-source-help" className="text-sm text-[var(--muted)]">
-          Paste a sheet selection or text. Start each text request with a Page
-          label or a numbered request heading.
+          Paste rows with or without column headers, or paste a request from a
+          message. Include the full target URL if the pasted text only shows the
+          anchor.
         </p>
         <Textarea
           ref={source}
