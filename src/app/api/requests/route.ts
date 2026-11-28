@@ -2,7 +2,7 @@ import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { createRequestBatch, exchangeInput } from "@/lib/exchange-input";
 import { requestStatuses } from "@/lib/request-statuses";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { accessiblePartnershipIds, requestList } from "@/server/request-list";
 import {
@@ -63,7 +63,7 @@ async function session() {
   const auth = await createClient();
   const {
     data: { user },
-  } = await auth.auth.getUser();
+  } = await getAuthUser(auth);
   if (!user)
     return {
       error: NextResponse.json(

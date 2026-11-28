@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUser } from "@/lib/supabase/server";
 
 const partnerSchema = z.object({
   name: z.string().trim().min(2).max(160),
@@ -30,7 +30,7 @@ async function getActiveUser() {
   const supabase = await createClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await getAuthUser(supabase);
   if (!user)
     return {
       response: NextResponse.json(

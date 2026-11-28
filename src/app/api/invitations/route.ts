@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { randomBytes, createHash } from "node:crypto";
 import { Resend } from "resend";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { collabioUrl, renderCollabioEmail } from "@/lib/email-template";
 import { invitationSchema } from "@/validations/invitation";
 
@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     const auth = await createClient();
     const {
       data: { user },
-    } = await auth.auth.getUser();
+    } = await getAuthUser(auth);
     if (!user)
       return NextResponse.json(
         { error: "Authentication required." },

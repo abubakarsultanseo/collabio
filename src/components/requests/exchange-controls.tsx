@@ -56,7 +56,7 @@ export function useExchangeOverview(partnershipId: string) {
       if (document.visibilityState === "visible") load();
     }
     load();
-    const timer = window.setInterval(refreshWhenVisible, 20_000);
+    const timer = window.setInterval(refreshWhenVisible, 60_000);
     window.addEventListener("collabio:exchange-updated", load);
     window.addEventListener("collabio:request-updated", load);
     document.addEventListener("visibilitychange", refreshWhenVisible);

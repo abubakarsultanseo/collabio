@@ -1,6 +1,6 @@
 import {NextResponse} from "next/server";
 import {z} from "zod";
-import {createClient} from "@/lib/supabase/server";
+import { createClient, getAuthUser } from "@/lib/supabase/server";
 
 const updateSchema=z.object({
   name:z.string().trim().min(2).max(160).optional(),
@@ -17,7 +17,7 @@ const updateSchema=z.object({
 
 async function getActiveUser(){
   const supabase=await createClient();
-  const {data:{user}}=await supabase.auth.getUser();
+  const {data:{user}}=await getAuthUser(supabase);
   if(!user)return {response:NextResponse.json({error:"Please sign in to continue."},{status:401})};
   const {data:profile,error}=await supabase.from("profiles").select("role,account_status").eq("id",user.id).maybeSingle();
   if(error)return {response:NextResponse.json({error:"Could not verify your account."},{status:500})};

@@ -50,7 +50,7 @@ export function NotificationBell() {
     }
     const tick = () => void refresh();
     tick();
-    const timer = window.setInterval(tick, open ? 15000 : 30000);
+    const timer = window.setInterval(tick, open ? 30000 : 60000);
     document.addEventListener("visibilitychange", tick);
     window.addEventListener("collabio:notification-read", tick);
     return () => {

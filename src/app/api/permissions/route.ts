@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const fields = [
@@ -38,7 +38,7 @@ async function adminUser() {
   const auth = await createClient();
   const {
     data: { user },
-  } = await auth.auth.getUser();
+  } = await getAuthUser(auth);
   if (!user)
     return {
       error: NextResponse.json(

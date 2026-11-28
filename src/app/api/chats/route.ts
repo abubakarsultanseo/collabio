@@ -1,6 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { deliverRequestChatEmails } from "@/lib/chat-email-jobs";
 
@@ -44,7 +44,7 @@ async function context() {
   const auth = await createClient();
   const {
     data: { user },
-  } = await auth.auth.getUser();
+  } = await getAuthUser(auth);
   if (!user) throw new ChatError("Sign in to continue.", 401);
   const { data: profile, error } = await auth
     .from("profiles")

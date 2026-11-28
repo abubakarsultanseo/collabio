@@ -1,6 +1,6 @@
 import { requestTypes } from "@/lib/request-content";
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createXlsx } from "@/lib/xlsx";
 
@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     const auth = await createClient();
     const {
       data: { user },
-    } = await auth.auth.getUser();
+    } = await getAuthUser(auth);
     if (!user)
       return NextResponse.json(
         { error: "Authentication required." },

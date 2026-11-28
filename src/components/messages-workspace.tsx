@@ -115,7 +115,7 @@ export default function MessagesWorkspace({
     const controller = new AbortController();
     const tick = () => void load(controller.signal);
     tick();
-    const timer = window.setInterval(tick, 15000);
+    const timer = window.setInterval(tick, 30000);
     document.addEventListener("visibilitychange", tick);
     return () => {
       controller.abort();

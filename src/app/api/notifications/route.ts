@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const schema = z.object({ id: z.string().uuid() });
@@ -8,7 +8,7 @@ async function access() {
   const auth = await createClient();
   const {
     data: { user },
-  } = await auth.auth.getUser();
+  } = await getAuthUser(auth);
   if (!user)
     return {
       error: NextResponse.json(

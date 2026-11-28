@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUser } from "@/lib/supabase/server";
 
 const deleteSchema = z.object({ userId: z.string().uuid() });
 
@@ -20,7 +20,7 @@ async function requireAdmin() {
   const auth = await createClient();
   const {
     data: { user },
-  } = await auth.auth.getUser();
+  } = await getAuthUser(auth);
   if (!user)
     return {
       error: NextResponse.json(

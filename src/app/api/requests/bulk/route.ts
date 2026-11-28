@@ -2,7 +2,7 @@ import { after } from "next/server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createRequestBatch, exchangeInput } from "@/lib/exchange-input";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   contentInput,
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     const auth = await createClient();
     const {
       data: { user },
-    } = await auth.auth.getUser();
+    } = await getAuthUser(auth);
     if (!user)
       return NextResponse.json(
         { error: "Authentication required." },

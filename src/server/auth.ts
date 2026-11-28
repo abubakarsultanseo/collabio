@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { redirect, unstable_rethrow } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { getProfile } from "@/server/profile";
 
 export const getWorkspaceAccess = cache(async () => {
@@ -9,7 +9,7 @@ export const getWorkspaceAccess = cache(async () => {
     const {
       data: { user },
       error,
-    } = await supabase.auth.getUser();
+    } = await getAuthUser(supabase);
     if (!user) {
       if (error && error.status !== undefined && error.status >= 500) {
         console.error(
