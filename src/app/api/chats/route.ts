@@ -158,6 +158,8 @@ async function threadQuery(ctx: Context, thread: Thread) {
       details: {
         threadId:
           ctx.profile.role === "partner" ? pair.adminId : pair.partnerId,
+        adminId: pair.adminId,
+        partnerId: pair.partnerId,
         title: pair.peerName,
         avatar_url: pair.avatar_url,
         canWrite: true,

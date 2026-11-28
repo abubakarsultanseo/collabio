@@ -127,11 +127,13 @@ export default function RequestListWorkspace({
   title,
   initialRequestId,
   initial,
+  unified = false,
 }: {
   scope: "inbox" | "sent" | "pending" | "overdue";
   title: string;
   initialRequestId?: string;
   initial?: InitialRequestList;
+  unified?: boolean;
 }) {
   const notify = useToast();
   const cache = useRequestListCache();
@@ -262,6 +264,16 @@ export default function RequestListWorkspace({
     }
     fetchWorkspaces();
   }, [advanced, cache, directionList, workspaceAttempt]);
+
+  useEffect(() => {
+    if (!directionList || filters.partnershipId || !workspaces.length) return;
+    let remembered = "";
+    try { remembered = localStorage.getItem("collabio:last-partnership") ?? ""; } catch { /* storage optional */ }
+    const selected = workspaces.find((item) => item.id === remembered)?.id ?? workspaces[0].id;
+    setFilters((current) => ({ ...current, partnershipId: selected }));
+    window.history.replaceState(null, "", `${window.location.pathname}?partner=${selected}`);
+    void fetch("/api/preferences/last-partnership", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ partnershipId: selected }) });
+  }, [directionList, filters.partnershipId, workspaces]);
 
   const load = useCallback(
     async (cursor?: Cursor, force = false) => {
@@ -716,7 +728,7 @@ export default function RequestListWorkspace({
         )}
       </header>
 
-      {directionList && (
+      {directionList && !unified && (
         <nav
           aria-label="Request direction"
           className="flex gap-5 border-b border-[var(--border)]"
@@ -766,14 +778,16 @@ export default function RequestListWorkspace({
               <Select
                 className="mt-1"
                 value={filters.partnershipId}
-                onChange={(event) =>
-                  setFilters((current) => ({
-                    ...current,
-                    partnershipId: event.target.value,
-                  }))
-                }
+                onChange={(event) => {
+                  const partnershipId = event.target.value;
+                  setFilters((current) => ({ ...current, partnershipId }));
+                  if (partnershipId) {
+                    try { localStorage.setItem("collabio:last-partnership", partnershipId); } catch { /* storage optional */ }
+                    window.history.pushState(null, "", `${window.location.pathname}?partner=${partnershipId}`);
+                    void fetch("/api/preferences/last-partnership", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ partnershipId }) });
+                  }
+                }}
               >
-                <option value="">All partners</option>
                 {workspaces.map((party) => (
                   <option key={party.id} value={party.id}>
                     {party.counterpart_name ?? party.name}

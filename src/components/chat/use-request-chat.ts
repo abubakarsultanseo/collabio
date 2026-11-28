@@ -80,7 +80,7 @@ export function useRequestChat(rows: SourceRow[]) {
 
     const tick = () => void load();
     tick();
-    const timer = window.setInterval(tick, 30000);
+    const timer = window.setInterval(tick, 60000);
     document.addEventListener("visibilitychange", tick);
     return () => {
       controller.abort();

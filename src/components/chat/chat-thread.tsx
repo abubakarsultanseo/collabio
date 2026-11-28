@@ -16,6 +16,7 @@ import { useToast } from "@/components/app/toast";
 import { StatusBadge, formatStatus } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { createClient } from "@/lib/supabase/client";
 
 type Message = {
   id: string;
@@ -42,6 +43,8 @@ type ThreadResponse = {
   hasOlder: boolean;
   hasNewer?: boolean;
   threadId?: string;
+  adminId?: string;
+  partnerId?: string;
   userId: string;
   canWrite: boolean;
   title?: string;
@@ -347,7 +350,7 @@ export function ChatThread({
     const tick = () => void refresh(controller.signal);
     tick();
     document.addEventListener("visibilitychange", tick);
-    const timer = window.setInterval(tick, 5000);
+    const timer = window.setInterval(tick, 60000);
     return () => {
       controller.abort();
       refreshing.current = false;
@@ -355,6 +358,37 @@ export function ChatThread({
       document.removeEventListener("visibilitychange", tick);
     };
   }, [refresh]);
+
+  // One browser Supabase client is shared by the app. Postgres Changes delivers
+  // persisted messages immediately; the 60-second refresh above is only a safety net.
+  useEffect(() => {
+    if (!info?.userId) return;
+    const supabase = createClient();
+    const resolvedId = resolvedThreadId.current ?? target.threadId;
+    if (resolvedId === "assigned") return;
+    const table = target.kind === "request" ? "request_comments" : "direct_chat_messages";
+    const adminId = typeof info.adminId === "string" ? info.adminId : resolvedId;
+    const partnerId = typeof info.partnerId === "string" ? info.partnerId : resolvedId;
+    const filter = target.kind === "request"
+      ? `request_id=eq.${resolvedId}`
+      : `admin_id=eq.${adminId}`;
+    const channel = supabase
+      .channel(`collabio-chat:${target.kind}:${resolvedId}:${info.userId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table, filter },
+        (payload) => {
+          const row = payload.new as Record<string, unknown>;
+          if (target.kind === "direct" && row.partner_id !== partnerId) return;
+          if (typeof row.id === "string" && historyRef.current.some((message) => message.id === row.id)) return;
+          void refresh();
+        },
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [info?.userId, target.kind, target.threadId, refresh]);
 
   useLayoutEffect(() => {
     const viewport = list.current;

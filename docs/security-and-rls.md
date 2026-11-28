@@ -1,11 +1,13 @@
-# Security and RLS
+# Security and RLS Notes
 
-- RLS is enabled on every foundation table.
-- Partners can read only their own profile, workspace, membership and permission record.
-- Admin policies require an active profile with role `admin`.
-- Invitation tokens are generated with Node crypto and only SHA-256 hashes are persisted.
-- The service-role key and Resend API key are server-only secrets. Never prefix them with `NEXT_PUBLIC_` and never commit them.
-- Public signup must be disabled in Supabase Auth before production. Invitation acceptance is the controlled account-provisioning path.
-- Google OAuth users default to pending partner status. OAuth never creates an admin.
+- Never expose `SUPABASE_SERVICE_ROLE_KEY` in browser code or variables prefixed with `NEXT_PUBLIC_`.
+- All new metadata tables in migration 0015 have RLS enabled.
+- Direct chat Realtime reads are limited by `admin_id = auth.uid()` or `partner_id = auth.uid()`.
+- Request comment Realtime reads use the pre-existing `comments_select_participants` policy, which checks the parent request participants or admin status.
+- The private `chat-attachments` bucket has a participant-read policy. The upload/download API and signed URL workflow are not included yet; keep the bucket private.
+- `/api/preferences/last-partnership` checks active account status and validates membership before saving a partnership ID.
+- Privileged operations remain server-only. New routes should use `getAuthUser()` and Zod validation.
 
-Before production, run the two-partner/one-admin RLS isolation suite and review every new table's policies. The included initial SQL test is a schema smoke test, not a substitute for the full isolation suite planned for Phase 5.
+## Required live verification
+
+Run `supabase/tests/rls-chat-realtime.sql` in a disposable test project after applying migrations. Then use two partner accounts, the admin and an unrelated account to verify isolation. This package has not been connected to the user's live Supabase project, so live RLS and Realtime behavior remain unverified.
