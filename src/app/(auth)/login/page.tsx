@@ -1,6 +1,28 @@
-"use client";
-import {useState} from "react"; import {createClient} from "@/lib/supabase/client";
-export default function LoginPage(){const [email,setEmail]=useState("");const [password,setPassword]=useState("");const [error,setError]=useState("");const [busy,setBusy]=useState(false);
-async function submit(e:React.FormEvent){e.preventDefault();setBusy(true);setError("");const supabase=createClient();const {error}=await supabase.auth.signInWithPassword({email,password});if(error){setError(error.message);setBusy(false);return;}window.location.href="/dashboard";}
-async function google(){setError("");const supabase=createClient();const {error}=await supabase.auth.signInWithOAuth({provider:"google",options:{redirectTo:`${window.location.origin}/auth/callback`}});if(error)setError(error.message);}
-return <main className="min-h-screen grid place-items-center p-5"><form onSubmit={submit} className="panel w-full max-w-md p-8"><p className="text-sm font-bold text-blue-700">COLLABIO</p><h1 className="text-2xl font-bold mt-2">Sign in</h1><p className="muted mt-2 mb-6">Use your invited account to continue.</p><label className="text-sm font-medium">Email</label><input className="field mt-1 mb-4" type="email" required value={email} onChange={e=>setEmail(e.target.value)}/><label className="text-sm font-medium">Password</label><input className="field mt-1 mb-4" type="password" required value={password} onChange={e=>setPassword(e.target.value)}/>{error&&<p className="text-sm text-red-600 mb-3">{error}</p>}<button disabled={busy} className="primary w-full">{busy?"Signing in...":"Sign in"}</button><div className="text-center muted my-4 text-sm">or</div><button type="button" onClick={google} className="w-full border rounded-lg p-3">Continue with Google</button><p className="text-xs muted mt-5">Accounts are created through administrator invitations. Public registration is disabled.</p></form></main>}
+import { redirect } from "next/navigation";
+import { AuthCard } from "@/components/app/auth-card";
+import { GoogleSignIn } from "@/components/app/google-sign-in";
+import { googleErrors, isGoogleError } from "@/lib/google-sign-in";
+import { returnPath } from "@/lib/return-path";
+import { getWorkspaceAccess } from "@/server/auth";
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string; error?: string }>;
+}) {
+  const { next, error } = await searchParams;
+  const destination = returnPath(next);
+  if (next && !error && (await getWorkspaceAccess()).state === "active")
+    redirect(destination);
+  return (
+    <AuthCard
+      title="Sign in to Collabio"
+      description="Continue with the Google email address invited to your workspace."
+    >
+      <GoogleSignIn
+        next={destination}
+        initialError={isGoogleError(error) ? googleErrors[error] : undefined}
+      />
+    </AuthCard>
+  );
+}

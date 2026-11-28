@@ -18,4 +18,4 @@ A cryptographically random 256-bit token is emailed to the invited address. Only
 Deploy the GitHub repository to Vercel. Configure environment variables in Vercel Project Settings. Configure Supabase Auth redirect URLs for both local development and the production domain.
 
 ## Automation decision
-Phase 3 will use Supabase `pg_cron` to invoke a secured Edge Function through `pg_net` every five minutes. This runs independently of a browser and avoids relying on Vercel Hobby's daily cron limit. The function must be idempotent and log each attempt.
+Phase 3 reminder processing currently uses the included GitHub Actions workflow to invoke the secured API endpoint every 30 minutes. This avoids Vercel Hobby's daily cron limit. The endpoint processes due reminder jobs idempotently and logs email attempts.

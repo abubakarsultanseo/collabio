@@ -51,7 +51,7 @@ create table public.app_settings (
 );
 insert into public.app_settings(key,value) values
  ('application_name','"Partner Collaboration Manager"'::jsonb),('timezone','"Asia/Karachi"'::jsonb),
- ('invitation_expiry_hours','72'::jsonb),('reminder_hours','[12,24]'::jsonb),
+ ('invitation_expiry_hours','48'::jsonb),('reminder_hours','[12,24]'::jsonb),
  ('default_partner_permissions','{"view_requests":true,"add_new_requests":true,"edit_own_requests":true,"edit_admin_requests":false,"edit_partner_requests":false,"update_request_status":true,"add_comments":true,"delete_requests":false,"view_activity_history":true,"download_reports":false}'::jsonb);
 
 create or replace function public.current_app_role() returns public.app_role language sql stable security definer set search_path=public as $$ select role from public.profiles where id=auth.uid() $$;

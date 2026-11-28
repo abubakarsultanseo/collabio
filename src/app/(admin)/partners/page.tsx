@@ -1,2 +1,9 @@
-import {requireAdmin} from "@/server/auth";import {listPartners} from "@/server/partners";import InvitePartnerForm from "@/components/invite-partner-form";
-export default async function PartnersPage(){await requireAdmin();const partners=await listPartners();return <main className="max-w-5xl mx-auto p-6 md:p-10"><a href="/dashboard" className="text-sm text-blue-700">← Dashboard</a><h1 className="text-3xl font-bold mt-3">My Partners</h1><p className="muted mt-2">Invite partners and manage their private workspace access.</p><section className="panel p-6 mt-6"><h2 className="font-semibold mb-4">Invite Partner</h2><InvitePartnerForm/></section><section className="panel p-6 mt-6"><h2 className="font-semibold">Partner accounts</h2>{partners.length===0?<p className="muted text-sm mt-3">No partners have been invited yet.</p>:<div className="overflow-x-auto mt-4"><table className="w-full text-sm"><thead><tr className="text-left border-b"><th className="py-2">Name</th><th>Email</th><th>Company</th><th>Status</th></tr></thead><tbody>{partners.map(p=><tr key={p.id} className="border-b"><td className="py-3">{p.full_name}</td><td>{p.email}</td><td>{p.company??"-"}</td><td>{p.account_status}</td></tr>)}</tbody></table></div>}</section></main>}
+import {requireUser} from "@/server/auth";
+import {getProfile} from "@/server/profile";
+import SeoPartnersWorkspace from "@/components/seo-partners-workspace";
+
+export default async function PartnersPage(){
+  const user=await requireUser();
+  const profile=await getProfile(user.id);
+  return <SeoPartnersWorkspace isAdmin={profile?.role==="admin"} currentUserId={user.id}/>;
+}
