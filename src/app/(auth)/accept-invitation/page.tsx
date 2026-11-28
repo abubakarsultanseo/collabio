@@ -1,26 +1,3 @@
-import { AuthCard, AuthError } from "@/components/app/auth-card";
-import { googleErrors, isGoogleError } from "@/lib/google-sign-in";
-import { GoogleSignIn } from "@/components/app/google-sign-in";
-
-export default async function AcceptInvitationPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ token?: string; error?: string }>;
-}) {
-  const { token, error } = await searchParams;
-  return (
-    <AuthCard
-      title="Join your Collabio workspace"
-      description="Accept using the Google account that received this invitation."
-    >
-      {token ? (
-        <GoogleSignIn
-          token={token}
-          initialError={isGoogleError(error) ? googleErrors[error] : undefined}
-        />
-      ) : (
-        <AuthError>Open your invitation link to continue.</AuthError>
-      )}
-    </AuthCard>
-  );
-}
+import AcceptInvitationForm from "@/components/accept-invitation-form";
+export default function AcceptInvitationPage({searchParams}:{searchParams:Promise<{token?:string}>}){return <AcceptInvitationContent searchParams={searchParams}/>}
+async function AcceptInvitationContent({searchParams}:{searchParams:Promise<{token?:string}>}){const {token}=await searchParams;return <main className="min-h-screen grid place-items-center p-5"><section className="panel w-full max-w-md p-8"><h1 className="text-2xl font-bold">Accept your invitation</h1><p className="muted mt-2 mb-6">Create your account using the invitation sent to your email.</p>{token?<AcceptInvitationForm token={token}/>:<p className="text-red-600 text-sm">Invitation token is missing.</p>}</section></main>}

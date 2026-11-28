@@ -4,7 +4,7 @@ Collabio is an invite-only collaboration workspace for managing SEO outreach par
 
 ## Current build status
 
-This update follows the supplied five-phase product brief: invite and permission management, two-way partner workspaces, request inbox/sent views, status and activity history, in-app notifications, request discussions, monthly reports, Excel exports, bulk request entry, advanced filters, and responsive dashboards. A scheduled job handles 12-hour reminders and 24-hour overdue alerts. Review [`docs/phase-1-to-3-review.md`](docs/phase-1-to-3-review.md) and [`docs/deal-system.md`](docs/deal-system.md) before deploying.
+This is a stabilization and database-foundation update based on the supplied project ZIP. It does **not** yet complete Phases 1–3 of the original master prompt. See [`docs/phase-1-to-3-review.md`](docs/phase-1-to-3-review.md) for included changes, migration order, and outstanding work.
 
 ## Stack
 - Next.js App Router, React, TypeScript, Tailwind CSS
@@ -21,36 +21,17 @@ This update follows the supplied five-phase product brief: invite and permission
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-side privileged Supabase access | **Yes** |
 | `RESEND_API_KEY` | Resend email API | **Yes** |
 | `EMAIL_FROM` | Verified sender identity | No |
-| `EMAIL_REPLY_TO` | Optional inbox for replies to invitation emails | No |
 | `NEXT_PUBLIC_SITE_URL` | Public Collabio URL | No |
 | `NEXT_PUBLIC_APP_URL` | Backward-compatible URL fallback | No |
 | `INVITATION_EXPIRY_HOURS` | Invitation lifetime (default 48) | No |
 | `APP_TIMEZONE` | Display timezone | No |
-| `CRON_SECRET` | Protects the reminder scheduler endpoint | **Yes** |
+| `CRON_SECRET` | Protects a future scheduled runner | **Yes** |
 
 Never commit `.env.local`, API keys, or the Supabase service-role key. `.env.local` is ignored by Git.
 
 ## Database migrations
 
-Apply SQL migrations in numeric order in the Supabase SQL Editor. Do not rerun migrations already applied. After confirming migrations 0001 through 0004, apply `0005_permissions_and_request_workspace.sql` once. It allows requests without quota deals and adds permission audit history.
-
-## Chat update
-
-1. Apply `supabase/migrations/0006_private_chat.sql` in Supabase after migrations 0001–0005. Deploy the updated app afterward.
-2. In Vercel, set `CHAT_ADMIN_USER_ID` to Abubakar’s UUID from **Supabase → Authentication → Users**. A single active admin is used automatically if this variable is empty. If more than one admin is active, the variable is required and other admins cannot open direct chats.
-3. Keep the existing `RESEND_API_KEY` and reminder workflow configured if you use request chat email alerts. Replies are saved before email delivery. The existing scheduled reminder endpoint also retries queued request chat emails. Direct chats are available inside Collabio.
-4. In a Vercel Preview, sign in as the assigned admin and two partner accounts. Confirm each partner sees only their direct conversation, request chat history loads independently, and opening the chat leaves the request’s Seen status and review timer unchanged. Verify an admin can reply to both partners and a partner can reply in their own chat.
-
-Chat polls for new messages every five seconds while the panel is open and the tab is visible. Unread counts refresh separately. Existing request comments are retained and initially count as unread until the recipient opens the thread.
-
-## Request workflow update
-
-Apply `supabase/migrations/0007_request_notes_and_rejections.sql` after 0006, before deploying this build. Existing rejected requests keep their history even if no reason was recorded at the time.
-
-- The header bell shows unread notifications. The floating Chat button opens the direct chat contacts for the assigned admin and opens the partner’s direct thread on partner accounts.
-- The chat popup can be moved on desktop using the three dots, or using arrow keys while the handle has focus. Minimize and restore to keep a draft during the current session. Enter sends a message and Shift+Enter adds a line.
-- Open a request with **View**, add shared notes via **Add note**, and use the status control in the list. Rejecting requires a reason. Only admins can change request fields or delete records.
-- In a preview, verify these actions as the assigned admin and as a partner. Check rejection with blank and valid reasons, copy the full request, and confirm note and reason visibility stays within the request workspace.
+Apply SQL migrations in numeric order in the Supabase SQL Editor. Do not rerun migration 0001 on an already initialized project. Apply migration 0002 after 0001. Back up the project before applying schema changes.
 
 ## Local development
 
@@ -58,85 +39,4 @@ Install Node.js LTS, then run `npm install`, copy `.env.example` to `.env.local`
 
 ## Verification
 
-Run `npm run typecheck`, `npm run lint`, and `npm run build` before deploying. Verify live Supabase, Resend, and OAuth behavior in a preview. The included GitHub Actions workflow calls the reminder endpoint on a 30-minute schedule. When using the workflow, set the same `CRON_SECRET` in Vercel and GitHub Actions.
-
-## Google sign-in, branded email, and historical imports
-
-1. Apply `supabase/migrations/0008_partner_onboarding.sql` once, after 0007 and before deploying this build.
-2. Enable the Google provider in **Supabase → Authentication → Providers**. Keep the Supabase callback URL in Google Cloud's authorized redirect URIs and add the app's exact `/auth/callback` URL to Supabase's redirect allowlist for production and the Vercel Preview you use for testing.
-3. Verify that the existing admin can sign in with Google using the email of their existing Collabio account. Verify an invited partner can accept with the invited Google address and gets an error if they select another account. Collabio's sign-in page now offers Google only.
-4. Set `NEXT_PUBLIC_SITE_URL` to the deployed Collabio origin so Resend emails point to the correct request or conversation. Preview a status email in Gmail or Outlook and check its subject, named actor, before and after status, rejection reason, and request link.
-5. For each partner, go to **Import requests**, download the CSV template, and map the sheet to the template. Select **Sent** for your original requests and **Received** for the partner's original requests. Use the exact invited Google email. Preview the counts and flagged rows, confirm the import, and verify the requests in the partner workspace before sending an invitation. The import stores historical requests without triggering new request emails or review reminders. It can stage a pending account when the partner has one yet to activate.
-
-Use batches of up to 1,000 rows or 2 MB per CSV. Add a stable `source_id` when available to help identify repeat uploads. Keep original dates in ISO format and supply the original reason for rejected records. The importer flags ambiguous or invalid rows for review before saving.
-
-## Google sign-in popup and branding
-
-The homepage now checks the session and sends visitors to `/login` or `/dashboard`. The Google button opens an account chooser in a separate window. The workspace opens in the original window after sign-in. When a browser blocks the popup, Collabio opens the sign-in flow in the current tab.
-
-### Use the official Google button and show the Collabio name
-
-1. Open the Google Cloud project for the **same Web application OAuth client** configured in Supabase's Google provider. Under **Google Auth Platform → Branding**, set the app name to **Collabio**, complete the domain and brand setup, and submit for verification if required for your external production app.
-2. Under that OAuth client's **Authorized JavaScript origins**, add `https://collabio.online` and `https://www.collabio.online` if both hosts serve the app. Add the exact preview origin when testing a Vercel Preview.
-3. Add `NEXT_PUBLIC_GOOGLE_CLIENT_ID` in Vercel with that Web OAuth client ID, ending in `.apps.googleusercontent.com`. Redeploy. The client ID is public. Keep the client secret in Supabase's Google provider settings.
-4. Keep the Supabase **Authentication → URL Configuration** allowlist aligned with the deployed origin. For the fallback sign-in flow, register the app's exact `/auth/callback` URL for each active hostname. Under the Google OAuth client, keep the Supabase provider callback URL in **Authorized redirect URIs**.
-
-The official Google button sends a nonce-bound Google credential to Collabio, where Supabase verifies it. Google controls the name and account chooser. The fallback uses the Supabase OAuth redirect and may show its project hostname. To brand the fallback hostname too, configure a Supabase custom domain such as `auth.collabio.online` and register that domain's `/auth/v1/callback` with Google before activating it.
-
-### Check a dashboard server error
-
-Confirm migration `0008_partner_onboarding.sql` has already run once in the production Supabase project. The dashboard can render if the optional avatar or historical request column is absent. Imported requests, invitation activation and other features from migration 0008 still depend on that migration. If the dashboard error recurs, use the reference on the error screen to find the server exception in Vercel's runtime logs. Verify that the URL, anon key and service-role key in Vercel belong to the same Supabase project.
-
-## Request formats and sheet import
-
-1. Apply `supabase/migrations/0009_request_content_formats.sql` once after 0008, before deploying. It adds the Listicle type, structured request content and the private request documents bucket.
-2. Link insertion is the default. Use Placement page URL, Anchor text, Target link, Original Content, and Edited Content. Paste general editing directions into Instructions if needed. **Copy full request** copies the placement URL, anchor, target, and two content sections in plain text.
-3. Guest post needs a Site URL and a document link or a PDF, DOC, or DOCX upload (up to 3 MB). For bulk entry, use document URLs. Listicle needs a Site URL, the requested position and a document link. Attachments are available to signed-in users who can view the request.
-4. From Google Sheets, use **File → Download → Comma-separated values (.csv, current sheet)**. In Collabio, open **Import requests**, choose the partner and their exact Google email, and select the source layout. The templates are also in [docs/import-templates](docs/import-templates/).
-   - For the side-by-side **Collab** layout, upload the whole tab and choose the exact heading of the partner block you want. Select the direction for that block and repeat for each partner.
-   - For the **Tabbed** layout, export Abubakar and Andy separately. If the tab titles identify the original sender, choose **Sent by me** for Abubakar and **Received from partner** for Andy. Do not import the **Our website** reference tab as requests.
-5. Use the original URLs and verify document links. If a Google Sheets chip exports only its title, add the actual link in a **Document URL** column. Set **Request Type** to **Guest post** or **Listicle** for document rows, and add **Listicle Position** where applicable. Leave unavailable historical dates empty. Check the preview before confirming. Existing imported rows are deduplicated, and confirming a historical import starts no new notification or review timer.
-
-Sheet status translations used by the two native layouts include Requested and New Req → New Request, In Process → In Progress, and Not Live and Want to remove → Hold. The last two labels stay in the request notes. Rejected rows require their source reason. The importer does not change Google Docs sharing permissions.
-
-## Partner request views and exchange slots
-
-Apply `supabase/migrations/0010_partner_request_exchanges.sql` after 0009 and before deploying this build. It adds the Removed status, fills in independent request numbers for each partner workspace and enables exchange balances. Existing request UUIDs are preserved.
-
-- In **Sent Requests** or **Received Requests**, select a partner under the filters. **Pending** includes Hold, Removed and Rejected requests. Cancelled requests are listed under **Cancelled** and are excluded from request totals and fulfilment.
-- In a partner workspace, start a new exchange when creating a request or select an existing open exchange. The ratio is shown as **links you give : links the partner gives**. The smaller commitment publishes first. For 1:1, the recipient of the opening request publishes first. The return slots become due after the first publisher has a Live placement. Only Live placements fill slots.
-- To add an existing request to a tracked exchange, an admin can open **Sent Requests** or **Received Requests**, click **Edit**, select the exchange and click **Save linked exchange**. Unlinked Live requests count toward the previous 1:1 balance. Requests in a tracked exchange count toward that exchange’s quotas.
-- Verify the updated invitation in a preview using a test invite. It uses the same Collabio email design and includes the sender, the partner's name and the Accept Invitation button.
-
-
-### Partner balances and account removal
-
-Apply `supabase/migrations/0011_partner_balance_and_deletion.sql` after 0010 and before deploying this update.
-
-- A Live link counts as given by the workspace member who published it. Previous placements without a tracked ratio are reconciled 1:1. If you published seven and your partner published four, your partner still owes three links. Only Live placements enter this balance.
-- Use **Apply to previous balance (1:1)** in the request form to settle that balance without opening a tracked exchange. The placement counts once it is Live. For a tracked 2:1 exchange, the agreed two return slots still become due after the first link goes Live.
-- In **Team & Invitations → Team members**, an admin can choose **Delete partner** and confirm. This revokes access and pending invitations, stops queued reminders, and hides the account from partner lists. Historical requests remain accessible to admins in the all-partners request views.
-
-
-### Separate numbering for Sent and Received
-
-Apply `supabase/migrations/0012_directional_request_numbering.sql` after 0011 and before deploying this update. Existing requests are renumbered from #1 within each sender → receiver pair. For example, your first request to Andy and Andy's first request to you are each #1. Every other partner has their own two sequences. Existing request URLs and history stay attached to the same requests.
-
-If SQL Editor reports that `requests_partner_number_unique` is missing, replace the entire previous 0012 query with the corrected migration in this repository and run it. The corrected file handles a missing legacy constraint and can be rerun without resetting directional numbers.
-
-
-### Faster requests and chat
-
-1. Apply the corrected `0012_directional_request_numbering.sql` if it has not run yet. Then apply `supabase/migrations/0013_dashboard_request_totals.sql` before deploying this version.
-2. Open Received and Sent under **Requests**. The first page contains lightweight rows. Opening **View** or **Edit** loads the full request. The filter menu includes saved filters and Excel export. Check that separate directional request numbers and partner permissions are preserved.
-3. As a partner, open direct chat and confirm it opens your assigned admin’s thread. Reopen a recently viewed thread and confirm the cached conversation appears while new messages sync. As an admin, confirm the partner contact list still works. Test thread permissions with two partner accounts.
-4. Verify dashboard totals against more than 200 requests. The recent list is limited to eight entries while the totals count the whole authorized scope.
-
-
-### Guest post links and publishing
-
-Apply `supabase/migrations/0014_guest_post_live_links.sql` after 0013 and before deploying this release.
-
-On a partner workspace, choose **Guest post**, enter the **Site URL** and shared **Guest post document link**, then enter the first anchor and target URL. Use **Add more** for additional links. Collabio saves one numbered request per pair in a single submission, and the selected exchange terms apply to each request. A submission may contain up to 50 requests.
-
-Choose **Live** from a guest post's status menu, enter the published article URL, and save. The shared draft and published URL are separate fields. The Live status menu also lets authorized users add or edit the published URL on an existing Live guest post.
+Run `npm run typecheck`, `npm run lint`, and `npm run build`. Live Supabase RLS, Google OAuth, Resend delivery and scheduled-job behavior require separate manual tests. This supplied update has not passed a fresh build in the preparation environment because dependency installation timed out.
